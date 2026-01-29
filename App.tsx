@@ -33,14 +33,14 @@ const DEFAULT_PHYSICS: PhysicsConfig = {
 
 const DEFAULT_VISUALS: VisualConfig = {
   ballColor: '#00ffcc', ballRadius: 25, ballShape: 'circle', 
-  arcColor: '#ff0055', arcGradientEnabled: true, arcGradientColors: ['#ff0055', '#7000ff'],
+  arcColor: '#73d955', arcGradientEnabled: true, arcGradientColors: ['#3a6cbd', '#5ce09e'],
   arcThickness: 50, arcRadius: 320, arcGap: 45, arcSegments: 1, rotationSpeed: 0.02, 
   trailLength: 30, trailWidth: 1.0, trailOpacity: 0.5, showTrail: true, 
   glowEffect: true, glowBlur: 30, glowIntensity: 1.5, backgroundColor: '#050505', 
   hitFlash: true, particleCount: 35, dustIntensity: 1.0, overlayText: 'WAIT FOR IT...', 
   overlayTextY: -250, overlayFontWeight: '900', overlayTextColor: '#ffffff', overlayFontSize: 80,
   spikeCount: 12, spikeLength: 40, spikeWidth: 20, 
-  spikeHollow: false, spikeColor: '#ff3333',
+  spikeHollow: false, spikeColor: '#73d955',
   show916Frame: true, melody: 'PENTATONIC', customMelody: '440, 550, 660', motionBlur: 0.2, cameraShake: 0,
   freezeGrayscale: false,
   explosionEffect: false, explosionIntensity: 1.0,
