@@ -110,6 +110,7 @@ export interface CounterConfig {
   fontWeight: string;
   showDecimals: boolean;
   countDown: boolean;
+  textPosition: 'ball' | 'center';
 }
 
 export interface ProductionConfig {

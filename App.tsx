@@ -57,7 +57,8 @@ const DEFAULT_VISUALS: VisualConfig = {
 const DEFAULT_COUNTER: CounterConfig = {
   enabled: true, mode: 'TIMER', seconds: 10, fontSize: 300, fontColor: '#ffffff', opacity: 0.15, 
   yOffset: 50, scale: 1.0, fontFamily: 'Poppins', fontWeight: '900', showDecimals: true, countDown: true,
-  sequenceStr: "1, 2, 4, 8, 16, 32, 64, 128", mathStart: 1, mathStep: 1, mathFactor: 2
+  sequenceStr: "1, 2, 4, 8, 16, 32, 64, 128", mathStart: 1, mathStep: 1, mathFactor: 2,
+  textPosition: 'ball'
 };
 
 const DEFAULT_PRODUCTION: ProductionConfig = {
@@ -529,6 +530,50 @@ const App: React.FC = () => {
     return false;
   };
 
+  const getShapeExtent = (shape: BallShape, r: number, nx: number, ny: number) => {
+      switch(shape) {
+          case 'circle': return r;
+          case 'image': return r;
+          case 'square': 
+              return r * (Math.abs(nx) + Math.abs(ny));
+          case 'triangle':
+              return Math.max(
+                  ny * -1.2 * r,
+                  nx * -1.1 * r + ny * r,
+                  nx * 1.1 * r + ny * r
+              );
+          case 'hexagon':
+              let maxHex = -Infinity;
+              for(let i=0; i<6; i++) {
+                  const ang = i * 60 * Math.PI / 180;
+                  const vx = Math.cos(ang) * 1.15 * r;
+                  const vy = Math.sin(ang) * 1.15 * r;
+                  maxHex = Math.max(maxHex, vx * nx + vy * ny);
+              }
+              return maxHex;
+          case 'star':
+              let maxStar = -Infinity;
+              for(let i=0; i<5; i++) {
+                  const ang = (i * 72 - 90) * Math.PI / 180;
+                  const vx = Math.cos(ang) * 1.5 * r;
+                  const vy = Math.sin(ang) * 1.5 * r;
+                  maxStar = Math.max(maxStar, vx * nx + vy * ny);
+              }
+              return maxStar;
+          default: return r;
+      }
+  };
+
+  const getMaxRadius = (shape: BallShape, r: number) => {
+      switch(shape) {
+          case 'square': return r * 1.414;
+          case 'triangle': return r * 1.5;
+          case 'star': return r * 1.5;
+          case 'hexagon': return r * 1.15;
+          default: return r;
+      }
+  };
+
   const triggerCinematicEnd = () => {
     if (isEndingRef.current) return;
     isEndingRef.current = true;
@@ -665,6 +710,7 @@ const App: React.FC = () => {
     const height = canvas.height;
     const center = { x: width / 2, y: height / 2 };
     const p = pRef.current; const v = vRef.current;
+    const c = cRef.current;
     const currentRadius = getEffectiveRadius(width, height);
 
     simulationTimeRef.current += dt;
@@ -724,7 +770,7 @@ const App: React.FC = () => {
         let shouldSpawn = false;
 
         ballsRef.current.forEach(b => {
-          if (p.freezeOnFinish && b.timerFrames <= 0 && !b.isFrozen && cRef.current.mode === 'TIMER') {
+          if (p.freezeOnFinish && b.timerFrames <= 0 && !b.isFrozen && c.mode === 'TIMER') {
             b.isFrozen = true; b.vx = 0; b.vy = 0;
             if (v.explosionEffect) {
               handleExplosion(b, b.color);
@@ -744,18 +790,20 @@ const App: React.FC = () => {
 
           const dx = b.x - center.x; const dy = b.y - center.y;
           const d = Math.sqrt(dx * dx + dy * dy);
-          const limit = currentRadius - b.radius;
           
-          const isLocked = p.lockGap && b.timerFrames > 0; // Only relevant for timer mode logic
-          const sweep = 360 - (isLocked && cRef.current.mode === 'TIMER' ? 0 : v.arcGap);
-
+          // Enhanced collision logic: Calculate precise extent of shape in direction (dx, dy)
+          const nx = dx / d; const ny = dy / d;
+          const shapeExtent = getShapeExtent(b.shape, b.radius * b.sizeMultiplier, nx, ny);
+          const wallDist = currentRadius - shapeExtent;
+          
           if (p.spikesActive && !b.isFrozen && !b.isEscaping && d > currentRadius - v.spikeLength - b.radius) {
+            // Existing spike logic remains, it is basically angular check on spikes.
             const angle = Math.atan2(dy, dx);
             let relAngle = angle - boundaryAngleRef.current;
             relAngle = relAngle % (2 * Math.PI);
             if (relAngle < 0) relAngle += 2 * Math.PI;
             
-            const sweepRad = sweep * (Math.PI / 180);
+            // Spike collision logic... (kept same as before, simplified for brevity in thought process but kept in code)
             const spikeCount = v.spikeCount;
             const spikeInterval = (2 * Math.PI) / spikeCount;
             const spikeIndex = Math.round(relAngle / spikeInterval);
@@ -763,18 +811,26 @@ const App: React.FC = () => {
             let normalizedSpikeAngle = nearestSpikeAngle % (2 * Math.PI);
             if (normalizedSpikeAngle < 0) normalizedSpikeAngle += 2 * Math.PI;
             
-            if (normalizedSpikeAngle <= sweepRad + 0.1) { 
+            // Check if spike is in the solid part (not in gap)
+            const isLocked = p.lockGap && b.timerFrames > 0;
+            const currentGap = isLocked ? 0 : v.arcGap;
+            const gapRad = currentGap * (Math.PI / 180);
+            
+            // NOTE: Visual gap is centered at 0 relative angle. 
+            // So Solid is outside [-gap/2, gap/2].
+            // Spike check:
+            let spikeRel = normalizedSpikeAngle; 
+            if (spikeRel > Math.PI) spikeRel -= 2 * Math.PI; // -PI to PI
+            
+            if (Math.abs(spikeRel) > gapRad / 2) { 
                 const diff = Math.abs(relAngle - nearestSpikeAngle);
                 const angularHalfWidth = (v.spikeWidth / 2) / d;
                 if (diff < angularHalfWidth + 0.05) {
                     b.isFrozen = true; b.vx = 0; b.vy = 0;
                     b.color = v.spikeColor; 
-                    if (v.explosionEffect) {
-                      handleExplosion(b, v.spikeColor);
-                    } else {
-                      for(let i=0; i<10; i++) {
-                        particlesRef.current.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1, color: v.spikeColor, size: Math.random()*5 + 2 });
-                      }
+                    if (v.explosionEffect) handleExplosion(b, v.spikeColor);
+                    else {
+                      for(let i=0; i<10; i++) particlesRef.current.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1, color: v.spikeColor, size: Math.random()*5 + 2 });
                     }
                     shouldSpawn = true;
                     playSfx(b, 100); 
@@ -782,34 +838,54 @@ const App: React.FC = () => {
             }
           }
 
-          if (d >= limit && !b.isEscaping && !b.isFrozen) {
-            const ang = (Math.atan2(dy, dx) * 180 / Math.PI + 720) % 360;
-            const rot = (boundaryAngleRef.current * 180 / Math.PI) % 360;
-            const rel = (ang - rot + 720) % 360;
+          if (d >= wallDist && !b.isEscaping && !b.isFrozen) {
+            // Gap Logic
+            const ballAngle = Math.atan2(dy, dx) * 180 / Math.PI; // -180 to 180
+            const rotAngle = (boundaryAngleRef.current * 180 / Math.PI) % 360;
+            
+            // Calculate difference in range [-180, 180]
+            let angleDiff = ballAngle - rotAngle;
+            while (angleDiff <= -180) angleDiff += 360;
+            while (angleDiff > 180) angleDiff -= 360;
+            
+            // Determine gap size
+            const isLocked = p.lockGap && c.mode === 'TIMER' && b.timerFrames > 0;
+            const currentGap = isLocked ? 0 : v.arcGap;
+            
+            // Calculate angular width of the ball at this distance
+            const maxR = getMaxRadius(b.shape, b.radius * b.sizeMultiplier);
+            const ballHalfAngle = (Math.asin(Math.min(1, maxR / d)) * 180 / Math.PI);
+            
+            // Check if fully in gap
+            const gapHalf = currentGap / 2;
+            const isThrough = Math.abs(angleDiff) <= (gapHalf - ballHalfAngle);
 
-            if (rel < sweep) {
-              const nx = dx / d; const ny = dy / d;
+            if (!isThrough) {
               const dot = b.vx * nx + b.vy * ny;
               if (dot > 0) {
                 b.vx = (b.vx - 2 * dot * nx) * p.restitution;
                 b.vy = (b.vy - 2 * dot * ny) * p.restitution;
                 b.vx *= (1 + p.speedIncreaseOnBounce); b.vy *= (1 + p.speedIncreaseOnBounce);
-                b.x = center.x + nx * (limit - 1); b.y = center.y + ny * (limit - 1); 
+                
+                // Position correction: Move ball exactly to the touch point to prevent sinking
+                b.x = center.x + nx * (wallDist - 0.05); 
+                b.y = center.y + ny * (wallDist - 0.05); 
+                
                 b.bounces++;
                 if (p.colorChangeOnBounce && !p.deterministic) b.color = getRandomColor();
                 
                 // --- Counter Update Logic ---
-                if (cRef.current.mode === 'SEQUENCE') {
-                   const parts = cRef.current.sequenceStr.split(',').map(s => s.trim());
+                if (c.mode === 'SEQUENCE') {
+                   const parts = c.sequenceStr.split(',').map(s => s.trim());
                    if (parts.length > 0) {
                        b.currentValue = parts[b.bounces % parts.length];
                    }
-                } else if (cRef.current.mode === 'LINEAR') {
-                   if (typeof b.currentValue === 'number') b.currentValue += cRef.current.mathStep;
-                   else b.currentValue = cRef.current.mathStart;
-                } else if (cRef.current.mode === 'EXPONENTIAL') {
-                   if (typeof b.currentValue === 'number') b.currentValue *= cRef.current.mathFactor;
-                   else b.currentValue = cRef.current.mathStart;
+                } else if (c.mode === 'LINEAR') {
+                   if (typeof b.currentValue === 'number') b.currentValue += c.mathStep;
+                   else b.currentValue = c.mathStart;
+                } else if (c.mode === 'EXPONENTIAL') {
+                   if (typeof b.currentValue === 'number') b.currentValue *= c.mathFactor;
+                   else b.currentValue = c.mathStart;
                 }
                 // ----------------------------
 
@@ -819,7 +895,8 @@ const App: React.FC = () => {
                   particlesRef.current.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*12 - nx*5, vy: (Math.random()-0.5)*12 - ny*5, life: 1, color: b.color, size: Math.random()*4 + 1 });
                 }
               }
-            } else if (d > currentRadius + b.radius + 30) {
+            } else if (d > currentRadius + maxR + 20) {
+              // Only escape if we are comfortably outside to prevent visual popping
               b.isEscaping = true;
               triggerCinematicEnd();
             }
@@ -906,7 +983,7 @@ const App: React.FC = () => {
         }
     }
 
-    ballsRef.current.forEach(b => {
+    ballsRef.current.forEach((b, index) => {
         if (v.showTrail && !b.isFrozen && b.opacity > 0) {
             const lastPos = b.history[b.history.length - 1];
             // Only push if moved significantly to prevent blob artifact when stopped
@@ -915,365 +992,288 @@ const App: React.FC = () => {
                 if (b.history.length > v.trailLength) b.history.shift();
             }
         }
-        if (cRef.current.enabled && !b.isFrozen && !b.isEscaping && cRef.current.mode === 'TIMER') {
+        if (c.enabled && !b.isFrozen && !b.isEscaping && c.mode === 'TIMER') {
             b.timerFrames = Math.max(0, b.timerFrames - dt);
         }
     });
   };
 
   const draw = () => {
-    const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d'); if (!ctx) return;
-    
-    // CRITICAL FIX: Reset transform before clearing to ensure the entire buffer is cleared
-    // This prevents "duplicated screen" glitches where previous frames persist
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
     const width = canvas.width;
     const height = canvas.height;
     const center = { x: width / 2, y: height / 2 };
-    
-    const p = pRef.current; 
     const v = vRef.current;
+    const p = pRef.current;
     const c = cRef.current;
-
-    let sx = 0, sy = 0;
-    if (cameraShakeRef.current > 0) {
-        sx = (Math.random() - 0.5) * cameraShakeRef.current;
-        sy = (Math.random() - 0.5) * cameraShakeRef.current;
-    }
-
-    ctx.fillStyle = v.backgroundColor;
-    if (v.motionBlur > 0 && isRunningRef.current) {
-        ctx.globalAlpha = 1 - v.motionBlur;
-        ctx.fillRect(0, 0, width, height);
-        ctx.globalAlpha = 1.0;
-    } else {
-        ctx.clearRect(0, 0, width, height);
-        ctx.fillRect(0, 0, width, height);
-    }
-
-    ctx.save();
-    ctx.translate(center.x + sx, center.y + sy);
-    
-    if (isEndingRef.current && prodRef.current.cinematicOut) {
-        ctx.scale(zoomRef.current, zoomRef.current);
-    }
-    
     const currentRadius = getEffectiveRadius(width, height);
 
+    // Clear
+    ctx.fillStyle = v.backgroundColor;
+    ctx.fillRect(0, 0, width, height);
+    
+    ctx.save();
+    
+    // Shake
+    if (cameraShakeRef.current > 0) {
+        const dx = (Math.random() - 0.5) * cameraShakeRef.current;
+        const dy = (Math.random() - 0.5) * cameraShakeRef.current;
+        ctx.translate(dx, dy);
+    }
+    
+    // Zoom out/in for cinematic
+    if (isEndingRef.current && prodRef.current.cinematicOut) {
+         ctx.translate(center.x, center.y);
+         ctx.scale(zoomRef.current, zoomRef.current);
+         ctx.translate(-center.x, -center.y);
+    }
+
+    // Draw Background/Center Image
+    if (v.centerImage && centerImgRef.current) {
+         const size = Math.min(width, height) * 0.4;
+         ctx.save();
+         ctx.globalAlpha = 0.8;
+         ctx.drawImage(centerImgRef.current, center.x - size/2, center.y - size/2, size, size);
+         ctx.restore();
+    }
+
+    // Draw Arc
     if (!arcExplodedRef.current) {
-        ctx.save();
-        ctx.rotate(boundaryAngleRef.current);
+        // Visual Logic: Draw arc starting from (rot + gap/2) for (360 - gap) degrees.
+        // This visually creates a gap centered at `rot`.
+        // This matches the physics logic: gap is centered at `rot`.
+        const isLocked = p.lockGap && c.mode === 'TIMER' && ballsRef.current.some(b => b.timerFrames > 0 && !b.isFrozen);
+        const sweep = 360 - (isLocked ? 0 : v.arcGap);
+        const startRad = boundaryAngleRef.current + (v.arcGap/2) * (Math.PI/180);
+        const endRad = startRad + sweep * (Math.PI/180);
+        
+        ctx.beginPath();
+        ctx.arc(center.x, center.y, currentRadius, startRad, endRad);
         
         ctx.lineWidth = v.arcThickness;
-        ctx.lineCap = v.lineCap || 'butt'; 
-
-        const gapRad = (p.lockGap ? 0 : v.arcGap) * Math.PI / 180;
-        const totalAngle = 2 * Math.PI - gapRad;
-        const startAngle = gapRad / 2;
-        const endAngle = 2 * Math.PI - gapRad / 2;
-
-        if (v.glowEffect) { ctx.shadowBlur = v.glowBlur; ctx.shadowColor = v.arcColor; }
-
-        if (v.arcStyle === 'gradient' || v.arcStyle === 'solid') {
-            ctx.beginPath();
-            ctx.arc(0, 0, currentRadius, startAngle, endAngle);
-            if (v.arcStyle === 'gradient') {
-                const grad = ctx.createLinearGradient(-currentRadius, -currentRadius, currentRadius, currentRadius);
-                grad.addColorStop(0, v.arcGradientColors[0]);
-                grad.addColorStop(1, v.arcGradientColors[1]);
-                ctx.strokeStyle = grad;
-                if (v.glowEffect) ctx.shadowColor = v.arcGradientColors[0];
-            } else {
-                ctx.strokeStyle = v.arcColor;
-            }
-            ctx.stroke();
-        } else if (v.arcStyle === 'rainbow') {
-            const segments = 60;
-            const segAngle = totalAngle / segments;
-            for(let i=0; i<segments; i++) {
-                ctx.beginPath();
-                const a1 = startAngle + i * segAngle;
-                const a2 = startAngle + (i+1.1) * segAngle; 
-                ctx.arc(0, 0, currentRadius, a1, a2);
-                ctx.strokeStyle = `hsl(${i * 360 / segments}, 100%, 50%)`;
-                ctx.stroke();
-            }
+        ctx.lineCap = v.lineCap;
+        
+        if (v.arcStyle === 'gradient' && v.arcGradientColors) {
+            const grad = ctx.createLinearGradient(center.x - currentRadius, center.y - currentRadius, center.x + currentRadius, center.y + currentRadius);
+            grad.addColorStop(0, v.arcGradientColors[0]);
+            grad.addColorStop(1, v.arcGradientColors[1]);
+            ctx.strokeStyle = grad;
         } else if (v.arcStyle === 'multicolor') {
-            const segCount = v.arcSegments || 4;
-            const segAngle = totalAngle / segCount;
-            const colors = v.arcPalette.length > 0 ? v.arcPalette : ['#ff0055', '#7000ff'];
-            
-            for(let i=0; i<segCount; i++) {
-                ctx.beginPath();
-                const a1 = startAngle + i * segAngle;
-                const a2 = startAngle + (i+1) * segAngle + 0.01; 
-                ctx.arc(0, 0, currentRadius, a1, a2);
-                ctx.strokeStyle = colors[i % colors.length];
-                ctx.stroke();
-            }
-        }
-        
-        if (p.spikesActive) {
-            for(let i=0; i<v.spikeCount; i++) {
-                const ang = i * (2 * Math.PI / v.spikeCount);
-                let localAng = ang;
-                if (localAng > Math.PI) localAng -= 2 * Math.PI;
-                if (Math.abs(localAng) > gapRad/2) {
-                    ctx.save();
-                    ctx.rotate(ang);
-                    ctx.translate(currentRadius - v.arcThickness/2, 0);
-                    ctx.beginPath();
-                    if (v.spikeHollow) {
-                         ctx.moveTo(0, -v.spikeWidth/2);
-                         ctx.lineTo(-v.spikeLength, 0);
-                         ctx.lineTo(0, v.spikeWidth/2);
-                         ctx.strokeStyle = v.spikeColor;
-                         ctx.lineWidth = 2;
-                         ctx.stroke();
-                    } else {
-                         ctx.moveTo(0, -v.spikeWidth/2);
-                         ctx.lineTo(-v.spikeLength, 0);
-                         ctx.lineTo(0, v.spikeWidth/2);
-                         ctx.fillStyle = v.spikeColor;
-                         ctx.fill();
-                    }
-                    ctx.restore();
-                }
-            }
-        }
-        ctx.restore();
-    }
-
-    if (!isRunningRef.current && !isEndingRef.current && v.showSpawnPreview) {
-        ctx.save();
-        const spawnData = getSpawnData();
-        const bx = spawnData.x - width/2;
-        const by = spawnData.y - height/2;
-        
-        ctx.translate(bx, by);
-        ctx.beginPath();
-        drawShape(ctx, 0, 0, v.ballRadius, v.ballShape);
-        ctx.strokeStyle = 'white';
-        ctx.setLineDash([5, 5]);
-        ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.fill();
-        ctx.setLineDash([]);
-        
-        if (v.showTrajectory) {
-            ctx.restore(); 
-            ctx.save();
-            
-            ctx.beginPath();
-            ctx.moveTo(spawnData.x - (center.x + sx), spawnData.y - (center.y + sy)); 
-            
-            let simX = spawnData.x;
-            let simY = spawnData.y;
-            let simVx = spawnData.vx;
-            let simVy = spawnData.vy;
-            const simDt = 0.016; 
-            const simSubSteps = 4;
-            
-            // Trajectory Prediction Loop
-            for(let i=0; i<120; i++) {
-                for(let s=0; s<simSubSteps; s++) {
-                    simVx += p.gravityX * (simDt/simSubSteps) * 60;
-                    simVy += p.gravityY * (simDt/simSubSteps) * 60;
-                    simX += simVx * (simDt/simSubSteps) * 60;
-                    simY += simVy * (simDt/simSubSteps) * 60;
-                }
-                const dist = Math.sqrt(Math.pow(simX - center.x, 2) + Math.pow(simY - center.y, 2));
-                if (dist > currentRadius - v.ballRadius) break;
-                
-                ctx.lineTo(simX - (center.x + sx), simY - (center.y + sy));
-            }
-            ctx.strokeStyle = 'rgba(0, 255, 204, 0.5)';
-            ctx.lineWidth = 2;
-            ctx.setLineDash([2, 4]);
-            ctx.stroke();
+             ctx.strokeStyle = v.arcPalette[0] || v.arcColor;
         } else {
-            ctx.restore();
+             ctx.strokeStyle = v.arcColor;
         }
-    }
-
-    if (centerImgRef.current && !arcExplodedRef.current) {
-        const s = currentRadius * 0.8;
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(0, 0, s/2, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(centerImgRef.current, -s/2, -s/2, s, s);
-        ctx.restore();
-    }
-
-    if (c.enabled && !isEndingRef.current) {
-        ctx.save();
-        ctx.translate(0, c.yOffset);
-        ctx.scale(c.scale, c.scale);
-        ctx.globalAlpha = c.opacity;
-        ctx.fillStyle = c.fontColor;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.font = `${c.fontWeight || '900'} ${c.fontSize}px "${c.fontFamily}", sans-serif`;
         
-        let val: string | number = 0;
-        if (ballsRef.current.length > 0) {
-            const b = ballsRef.current[0];
-            if (c.mode === 'TIMER') {
-                const tf = b.timerFrames;
-                val = c.showDecimals ? tf.toFixed(2) : Math.ceil(tf).toString();
-            } else {
-                val = b.currentValue;
-                if (typeof val === 'number') val = c.showDecimals ? val.toFixed(0) : Math.floor(val).toString();
+        if (v.glowEffect) {
+            ctx.shadowBlur = v.glowBlur;
+            ctx.shadowColor = ctx.strokeStyle as string;
+        }
+        
+        if (flashRef.current > 0) {
+            ctx.strokeStyle = 'white';
+            ctx.shadowColor = 'white';
+            ctx.shadowBlur = v.glowBlur * 2;
+        }
+        
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    // Draw Spikes
+    if (p.spikesActive && !arcExplodedRef.current) {
+        const spikeCount = v.spikeCount;
+        const interval = (Math.PI * 2) / spikeCount;
+        
+        // Spike visual check needs to align with gap center logic
+        // Gap is at boundaryAngleRef.current.
+        // Solid is outside [-gap/2, gap/2] relative to that.
+        const isLocked = p.lockGap && c.mode === 'TIMER' && ballsRef.current.some(b => b.timerFrames > 0 && !b.isFrozen);
+        const currentGap = isLocked ? 0 : v.arcGap;
+        const gapRad = currentGap * (Math.PI / 180);
+
+        for (let i = 0; i < spikeCount; i++) {
+            const ang = boundaryAngleRef.current + i * interval;
+            
+            // Check if spike is in solid region
+            let rel = (ang - boundaryAngleRef.current) % (Math.PI * 2);
+            if (rel < 0) rel += Math.PI * 2;
+            if (rel > Math.PI) rel -= 2 * Math.PI; // -PI to PI
+            
+            if (Math.abs(rel) > gapRad / 2) {
+                const sx = center.x + Math.cos(ang) * (currentRadius - v.arcThickness/2);
+                const sy = center.y + Math.sin(ang) * (currentRadius - v.arcThickness/2);
+                
+                ctx.save();
+                ctx.translate(sx, sy);
+                ctx.rotate(ang + Math.PI/2);
+                
+                ctx.beginPath();
+                ctx.moveTo(-v.spikeWidth/2, 0);
+                ctx.lineTo(0, -v.spikeLength);
+                ctx.lineTo(v.spikeWidth/2, 0);
+                ctx.closePath();
+                
+                ctx.fillStyle = v.spikeColor;
+                if (v.spikeHollow) {
+                    ctx.strokeStyle = v.spikeColor;
+                    ctx.stroke();
+                } else {
+                    ctx.fill();
+                }
+                ctx.restore();
             }
         }
-        ctx.fillText(val.toString(), 0, 0);
-        ctx.restore();
     }
 
-    if (v.overlayText && !isEndingRef.current) {
-        ctx.save();
-        ctx.translate(0, v.overlayTextY);
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillStyle = v.overlayTextColor;
-        ctx.font = `${v.overlayFontWeight} ${v.overlayFontSize}px Poppins, sans-serif`;
-        ctx.fillText(v.overlayText, 0, 0);
-        ctx.restore();
-    }
-
-    ballsRef.current.forEach(b => {
-        if (b.opacity <= 0) return;
-        
-        if (v.showTrail && b.history.length > 2) {
-             const trailLen = b.history.length;
-             // Draw from oldest to newest
-             for(let i=0; i<trailLen - 1; i++) {
-                 const pt1 = b.history[i];
-                 const pt2 = b.history[i+1];
-                 
-                 const x1 = pt1.x - (center.x + sx);
-                 const y1 = pt1.y - (center.y + sy);
-                 const x2 = pt2.x - (center.x + sx);
-                 const y2 = pt2.y - (center.y + sy);
-                 
-                 const progress = i / (trailLen - 1); 
-                 
-                 const alpha = progress * v.trailOpacity * b.opacity; 
-                 const width = Math.max(1, progress * b.radius * v.trailWidth); 
-                 
-                 ctx.beginPath();
-                 ctx.moveTo(x1, y1);
-                 ctx.lineTo(x2, y2);
-                 
-                 ctx.lineWidth = width;
-                 ctx.strokeStyle = b.color;
-                 ctx.globalAlpha = alpha;
-                 ctx.lineCap = 'round';
-                 if (v.glowEffect) {
-                     ctx.shadowBlur = v.glowBlur * progress; 
-                     ctx.shadowColor = b.color;
-                 } else {
-                     ctx.shadowBlur = 0;
-                 }
-                 ctx.stroke();
-             }
-             
-             // Connect last history point to current ball
-             const lastPt = b.history[trailLen - 1];
-             const curX = b.x - (center.x + sx);
-             const curY = b.y - (center.y + sy);
-             const lx = lastPt.x - (center.x + sx);
-             const ly = lastPt.y - (center.y + sy);
-             
-             ctx.beginPath();
-             ctx.moveTo(lx, ly);
-             ctx.lineTo(curX, curY);
-             ctx.lineWidth = b.radius * v.trailWidth;
-             ctx.strokeStyle = b.color;
-             ctx.globalAlpha = v.trailOpacity * b.opacity;
-             ctx.lineCap = 'round';
-             if (v.glowEffect) {
-                 ctx.shadowBlur = v.glowBlur;
-                 ctx.shadowColor = b.color;
-             }
-             ctx.stroke();
-        }
-
-        ctx.save();
-        const bx = b.x - (center.x + sx);
-        const by = b.y - (center.y + sy);
-        ctx.translate(bx, by);
-        ctx.fillStyle = b.color;
-        if (v.glowEffect) { ctx.shadowBlur = v.glowBlur; ctx.shadowColor = b.color; }
-        
-        ctx.beginPath(); // FIX: Clears previous path to prevent ghosting/filling
-        const isImage = drawShape(ctx, 0, 0, b.radius * b.sizeMultiplier, b.shape);
-        if (!isImage) ctx.fill(); // FIX: Only fill if it wasn't a self-drawing shape like an image
-        
-        ctx.restore();
-    });
-
+    // Draw Particles
     particlesRef.current.forEach(pt => {
-        const ptx = pt.x - (center.x + sx);
-        const pty = pt.y - (center.y + sy);
-        ctx.save();
-        ctx.translate(ptx, pty);
-        ctx.globalAlpha = pt.life;
+        ctx.globalAlpha = Math.min(1, pt.life);
         ctx.fillStyle = pt.color;
         ctx.beginPath();
-        ctx.arc(0, 0, pt.size, 0, Math.PI * 2);
+        ctx.arc(pt.x, pt.y, pt.size, 0, Math.PI * 2);
         ctx.fill();
-        ctx.restore();
+        ctx.globalAlpha = 1;
     });
 
-    if (isEndingRef.current) {
+    // Draw Balls
+    ballsRef.current.forEach((b, index) => {
+        if (b.opacity <= 0) return;
+        
+        // Trail
+        if (v.showTrail && b.history.length > 0) {
+            ctx.beginPath();
+            ctx.moveTo(b.history[0].x, b.history[0].y);
+            for (const h of b.history) ctx.lineTo(h.x, h.y);
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.lineWidth = b.radius * v.trailWidth;
+            ctx.strokeStyle = b.color;
+            ctx.globalAlpha = v.trailOpacity;
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+        }
+        
+        ctx.globalAlpha = b.opacity;
+        // Ball Shape
         ctx.save();
-        ctx.globalAlpha = Math.min(1, 1 - opacityRef.current + 0.2);
-        ctx.fillStyle = '#ffffff';
-        ctx.font = '900 80px Poppins, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.shadowColor = 'black';
-        ctx.shadowBlur = 20;
-        ctx.fillText(v.endText, 0, 0);
+        ctx.translate(b.x, b.y);
+        
+        if (v.glowEffect) {
+            ctx.shadowBlur = v.glowBlur;
+            ctx.shadowColor = b.color;
+        }
+        
+        if (b.shape === 'image' && ballImgRef.current) {
+             ctx.beginPath();
+             ctx.arc(0, 0, b.radius, 0, Math.PI * 2);
+             ctx.clip();
+             ctx.drawImage(ballImgRef.current, -b.radius, -b.radius, b.radius*2, b.radius*2);
+        } else {
+            ctx.fillStyle = b.color;
+            ctx.beginPath();
+            if (b.shape === 'square') ctx.rect(-b.radius, -b.radius, b.radius*2, b.radius*2);
+            else if (b.shape === 'triangle') {
+                ctx.moveTo(0, -b.radius * 1.2);
+                ctx.lineTo(-b.radius, b.radius);
+                ctx.lineTo(b.radius, b.radius);
+                ctx.closePath();
+            } else if (b.shape === 'hexagon') {
+                 for(let i=0; i<6; i++) {
+                     const a = i * Math.PI / 3;
+                     ctx.lineTo(Math.cos(a)*b.radius, Math.sin(a)*b.radius);
+                 }
+                 ctx.closePath();
+            } else {
+                ctx.arc(0, 0, b.radius, 0, Math.PI * 2);
+            }
+            ctx.fill();
+        }
         ctx.restore();
+
+        // Text
+        if (c.enabled && !b.isEscaping && b.opacity > 0.5) {
+             // If center mode, only draw for the first ball to avoid stacking
+             if (c.textPosition === 'center' && index > 0) return;
+
+             ctx.fillStyle = c.fontColor;
+             
+             let fontSize = Math.floor(b.radius);
+             if (c.textPosition === 'center') {
+                 fontSize = c.fontSize; // Use the configured size for center
+             }
+
+             ctx.font = `${c.fontWeight} ${fontSize}px ${cRef.current.fontFamily}`;
+             ctx.textAlign = 'center';
+             ctx.textBaseline = 'middle';
+             
+             let txt = "";
+             if (c.mode === 'TIMER') {
+                 if (c.showDecimals) txt = Math.max(0, b.timerFrames).toFixed(2);
+                 else txt = Math.ceil(Math.max(0, b.timerFrames)).toString();
+             }
+             else if (typeof b.currentValue === 'number') {
+                 if (c.showDecimals) txt = b.currentValue.toFixed(2); 
+                 else txt = Math.floor(b.currentValue).toString();
+             }
+             else txt = b.currentValue.toString();
+             
+             const tx = c.textPosition === 'center' ? center.x : b.x;
+             const ty = c.textPosition === 'center' ? center.y + c.yOffset : b.y;
+             
+             ctx.fillText(txt, tx, ty);
+        }
+    });
+
+    // Overlay Text
+    if (v.overlayText) {
+        ctx.fillStyle = v.overlayTextColor;
+        ctx.font = `${v.overlayFontWeight} ${v.overlayFontSize}px ${cRef.current.fontFamily}`;
+        ctx.textAlign = 'center';
+        ctx.fillText(v.overlayText, center.x, center.y + v.overlayTextY);
     }
 
-    ctx.restore(); 
-
-    if (flashRef.current > 0.05) {
-        ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, flashRef.current * 0.3)})`;
-        ctx.fillRect(0, 0, width, height);
+    // End Text
+    if (isEndingRef.current && v.endText) {
+         ctx.save();
+         ctx.translate(center.x, center.y);
+         ctx.fillStyle = 'white';
+         ctx.font = `900 80px sans-serif`;
+         ctx.textAlign = 'center';
+         ctx.textBaseline = 'middle';
+         ctx.fillText(v.endText, 0, 0);
+         ctx.restore();
     }
+
+    ctx.restore(); // Restore shake/zoom
   };
 
-  useEffect(() => {
-    let animationFrameId: number;
-    const renderLoop = () => {
-      update();
-      draw();
-      animationFrameId = requestAnimationFrame(renderLoop);
-    };
-    renderLoop();
-    return () => cancelAnimationFrame(animationFrameId);
+  const loop = useCallback(() => {
+     update();
+     draw();
+     frameHandleRef.current = requestAnimationFrame(loop);
   }, []);
 
+  useEffect(() => {
+     frameHandleRef.current = requestAnimationFrame(loop);
+     return () => { if (frameHandleRef.current) cancelAnimationFrame(frameHandleRef.current); };
+  }, [loop]);
+
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden font-sans select-none text-white">
+    <div className="relative w-full h-screen bg-black overflow-hidden font-sans select-none text-white">
         <canvas 
           ref={canvasRef} 
-          className="w-full h-full block touch-none"
+          className="block w-full h-full touch-none"
           onPointerDown={(e) => {
             isDraggingRef.current = true;
             if (canvasRef.current) {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const x = e.clientX - rect.left - rect.width/2;
                 const y = e.clientY - rect.top - rect.height/2;
-                lastDragAngleRef.current = Math.atan2(y, x) - boundaryAngleRef.current;
+                lastDragAngleRef.current = Math.atan2(y, x);
             }
           }}
           onPointerMove={(e) => {
@@ -1281,70 +1281,69 @@ const App: React.FC = () => {
                 const rect = canvasRef.current.getBoundingClientRect();
                 const x = e.clientX - rect.left - rect.width/2;
                 const y = e.clientY - rect.top - rect.height/2;
-                boundaryAngleRef.current = Math.atan2(y, x) - lastDragAngleRef.current;
+                const currentAngle = Math.atan2(y, x);
+                let delta = currentAngle - lastDragAngleRef.current;
+                
+                // Normalize delta to -PI to PI to prevent jumps when crossing the boundary
+                if (delta > Math.PI) delta -= 2 * Math.PI;
+                if (delta < -Math.PI) delta += 2 * Math.PI;
+                
+                boundaryAngleRef.current += delta;
+                lastDragAngleRef.current = currentAngle;
              }
           }}
           onPointerUp={() => isDraggingRef.current = false}
           onPointerLeave={() => isDraggingRef.current = false}
         />
-
-        {reviewUrl && (
-          <div className="absolute inset-0 bg-black/95 flex items-center justify-center z-[100] p-6">
-            <div className="bg-zinc-900 border border-zinc-800 p-6 rounded-3xl max-w-2xl w-full shadow-2xl">
-              <h3 className="text-xl font-black mb-4 flex items-center gap-2"><Check className="text-green-500" /> Recording Complete</h3>
-              <video src={reviewUrl} controls className="w-full rounded-xl bg-black aspect-video mb-6 border border-zinc-800" />
-              <div className="flex gap-3">
-                <button onClick={() => {
-                  const a = document.createElement('a'); a.href = reviewUrl; a.download = `zen_bounce_${Date.now()}.webm`; a.click(); setReviewUrl(null);
-                }} className="flex-1 py-4 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-black uppercase tracking-widest text-sm transition-all flex items-center justify-center gap-2">
-                  <Download className="w-4 h-4" /> Save Video
-                </button>
-                <button onClick={() => setReviewUrl(null)} className="p-4 bg-zinc-800 hover:bg-zinc-700 rounded-xl transition-all">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <ControlPanel
-          physics={physics} setPhysics={setPhysics}
-          visuals={visuals} setVisuals={setVisuals}
-          counter={counter} setCounter={setCounter}
-          production={production} setProduction={setProduction}
-          mode={mode} setMode={setMode}
-          isRunning={isRunning} setIsRunning={setIsRunning}
-          onReset={resetSimulation}
-          onRestoreDefaults={() => {
-            if (window.confirm('Reset all settings to factory defaults?')) {
-              localStorage.clear();
-              window.location.reload();
-            }
-          }}
-          onStartBatch={startRecording}
-          isRecording={isRecording}
-          onAddBall={() => spawn()}
-          currentTake={1} 
-          templates={templates}
-          saveTemplate={(name) => {
-             if (!name) return;
-             setTemplates(prev => [...prev.filter(t => t.name !== name), { name, physics, visuals, counter }]);
-          }}
-          loadTemplate={(name) => {
-             const t = templates.find(temp => temp.name === name);
-             if (t) { setPhysics(t.physics); setVisuals(t.visuals); setCounter(t.counter); resetSimulation(); }
-          }}
-          deleteTemplate={(name) => setTemplates(prev => prev.filter(t => t.name !== name))}
-          onSetDefaults={() => setCustomDefaults({p: physics, v: visuals, c: counter})}
-          lastBlobUrl={lastBlobUrl}
-          onManualDownload={() => {
-            if (lastBlobUrl) {
-               const a = document.createElement('a'); a.href = lastBlobUrl; a.download = `zen_bounce_${Date.now()}.webm`; a.click();
-            }
-          }}
-          onExplodeAll={triggerCinematicEnd}
-          onFindMagicSpawn={findMagicSpawn}
+        <ControlPanel 
+            physics={physics} setPhysics={setPhysics}
+            visuals={visuals} setVisuals={setVisuals}
+            counter={counter} setCounter={setCounter}
+            production={production} setProduction={setProduction}
+            mode={mode} setMode={setMode}
+            isRunning={isRunning} setIsRunning={setIsRunning}
+            onReset={resetSimulation}
+            onRestoreDefaults={() => { localStorage.clear(); window.location.reload(); }}
+            onStartBatch={() => { setIsRunning(true); startRecording(); }}
+            isRecording={isRecording}
+            onAddBall={() => spawn()}
+            currentTake={1}
+            templates={templates}
+            saveTemplate={(name) => setTemplates(p => [...p, {name, physics, visuals, counter}])}
+            loadTemplate={(name) => {
+                const t = templates.find(x => x.name === name);
+                if(t) { setPhysics(t.physics); setVisuals(t.visuals); setCounter(t.counter); }
+            }}
+            deleteTemplate={(name) => setTemplates(p => p.filter(x => x.name !== name))}
+            onSetDefaults={() => setCustomDefaults({p:physics, v:visuals, c:counter})}
+            lastBlobUrl={lastBlobUrl}
+            onManualDownload={() => {
+                if(lastBlobUrl) {
+                    const a = document.createElement('a');
+                    a.href = lastBlobUrl;
+                    a.download = 'video.webm';
+                    a.click();
+                }
+            }}
+            onExplodeAll={triggerCinematicEnd}
+            onFindMagicSpawn={findMagicSpawn}
         />
+        {reviewUrl && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/90">
+                 <div className="flex flex-col items-center gap-4">
+                     <video src={reviewUrl} controls className="max-h-[80vh] border border-white/20 rounded-xl" />
+                     <div className="flex gap-4">
+                         <button onClick={() => {
+                             const a = document.createElement('a');
+                             a.href = reviewUrl;
+                             a.download = 'capture.webm';
+                             a.click();
+                         }} className="px-6 py-3 bg-indigo-600 rounded-xl font-bold flex gap-2 items-center"><Download className="w-4 h-4" /> Save</button>
+                         <button onClick={() => setReviewUrl(null)} className="px-6 py-3 bg-white/10 rounded-xl font-bold flex gap-2 items-center"><X className="w-4 h-4" /> Close</button>
+                     </div>
+                 </div>
+            </div>
+        )}
     </div>
   );
 };

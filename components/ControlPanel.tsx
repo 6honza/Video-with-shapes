@@ -397,9 +397,7 @@ const ControlPanel: React.FC<Props> = ({
             </Section>
             
             <Section icon={Code} label="Scripting (Adv)">
-              <p className="text-[9px] text-zinc-500 mb-2">
-  {'JSON Events: [{"time":5, "type":"gravity", "value":1.5}]'}
-</p>
+              <p className="text-[9px] text-zinc-500 mb-2">JSON Events: [{"time":5, "type":"gravity", "value":1.5}]</p>
               <textarea 
                 value={physics.scriptJSON} 
                 onChange={e => update(physics, setPhysics, 'scriptJSON', e.target.value)} 
@@ -522,6 +520,17 @@ const ControlPanel: React.FC<Props> = ({
               <Control label="Size (Scale)" v={counter.fontSize} min={50} max={500} onChange={v => update(counter, setCounter, 'fontSize', v)} />
               <Control label="Opacity" v={counter.opacity} min={0} max={1} step={0.01} onChange={v => update(counter, setCounter, 'opacity', v)} />
               <Control label="Position Y" v={counter.yOffset} min={-600} max={600} onChange={v => update(counter, setCounter, 'yOffset', v)} />
+
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                  <button onClick={() => update(counter, setCounter, 'textPosition', 'ball')} className={`py-2 px-1 text-[8px] font-black uppercase rounded-xl border transition-all ${counter.textPosition === 'ball' ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-white/5 border-white/5 text-zinc-500'}`}>
+                      On Ball
+                  </button>
+                  <button onClick={() => update(counter, setCounter, 'textPosition', 'center')} className={`py-2 px-1 text-[8px] font-black uppercase rounded-xl border transition-all ${counter.textPosition === 'center' ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-white/5 border-white/5 text-zinc-500'}`}>
+                      Center
+                  </button>
+              </div>
+
+              <Toggle label="Show Decimals" active={counter.showDecimals} onClick={() => update(counter, setCounter, 'showDecimals', !counter.showDecimals)} />
             </Section>
           </div>
         )}
