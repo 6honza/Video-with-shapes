@@ -4,6 +4,9 @@ export type BallShape = 'circle' | 'square' | 'triangle' | 'hexagon' | 'star' | 
 export type MelodyType = 'NONE' | 'PENTATONIC' | 'MEGALOVANIA' | 'GRAVITY_FALLS' | 'DOREMI' | 'MII_CHANNEL' | 'WII_SHOP' | 'TETRIS' | 'ZELDA' | 'MARIO' | 'HARRY_POTTER' | 'LAMOUR_TOUJOURS' | 'CUSTOM';
 export type SoundWaveform = 'sine' | 'square' | 'sawtooth' | 'triangle' | 'piano';
 export type SpawnType = 'random' | 'manual' | 'away_from_gap' | 'fixed';
+export type ArcStyle = 'solid' | 'gradient' | 'multicolor' | 'rainbow';
+export type LineCapStyle = 'round' | 'butt' | 'square';
+export type CounterMode = 'TIMER' | 'SEQUENCE' | 'LINEAR' | 'EXPONENTIAL';
 
 export interface PhysicsConfig {
   gravityY: number;
@@ -34,6 +37,8 @@ export interface PhysicsConfig {
   freqStep: number;
   soundVolume: number; 
   soundReverbDuration: number;
+  deterministic: boolean; // No randomness
+  physicsSubSteps: number;
 }
 
 export interface VisualConfig {
@@ -41,12 +46,15 @@ export interface VisualConfig {
   ballRadius: number;
   ballShape: BallShape;
   arcColor: string;
-  arcGradientEnabled: boolean;
+  arcStyle: ArcStyle;
+  arcPalette: string[];
+  arcGradientEnabled: boolean; // Deprecated in UI, kept for legacy logic or mapped to arcStyle
   arcGradientColors: [string, string];
   arcThickness: number;
   arcRadius: number;
   arcGap: number;
-  arcSegments: number;
+  arcSegments: number; // For multicolor
+  lineCap: LineCapStyle;
   rotationSpeed: number;
   trailLength: number;
   trailWidth: number;
@@ -81,24 +89,32 @@ export interface VisualConfig {
   endSceneDuration: number;
   ballImage: string; 
   centerImage: string; 
+  showSpawnPreview: boolean;
+  showTrajectory: boolean;
 }
 
 export interface CounterConfig {
   enabled: boolean;
-  seconds: number;
+  mode: CounterMode;
+  seconds: number; // Used for TIMER
+  sequenceStr: string; // Used for SEQUENCE
+  mathStart: number; // Used for LINEAR/EXP
+  mathStep: number; // Used for LINEAR
+  mathFactor: number; // Used for EXP
   fontSize: number;
   fontColor: string;
   opacity: number;
   yOffset: number;
   scale: number;
   fontFamily: string;
+  fontWeight: string;
   showDecimals: boolean;
   countDown: boolean;
 }
 
 export interface ProductionConfig {
   batchCount: number;
-  videoDuration: number;
+  maxVideoDuration: number; // Replaced "videoDuration" concept with explicit Max Limit
   minVideoDuration: number;
   autoStartNext: boolean;
   cinematicOut: boolean;
@@ -109,7 +125,7 @@ export interface ProductionConfig {
   gpuPriority: boolean; 
   forceHD: boolean; 
   cinematicExplosion: boolean; 
-  previewBeforeSave: boolean; // New: Option to review video before saving
+  previewBeforeSave: boolean; 
 }
 
 export interface Ball {
@@ -123,6 +139,7 @@ export interface Ball {
   color: string;
   history: { x: number; y: number }[];
   timerFrames: number;
+  currentValue: number | string; // For Sequence/Math modes
   isEscaping: boolean;
   isFrozen: boolean;
   bounces: number;
