@@ -1150,11 +1150,10 @@ const App: React.FC = () => {
             for (const h of b.history) ctx.lineTo(h.x, h.y);
             ctx.lineCap = 'round';
             ctx.lineJoin = 'round';
-            ctx.lineWidth = b.radius * v.trailWidth;
+            ctx.lineWidth = (b.radius * 2) * v.trailWidth;
             ctx.strokeStyle = b.color;
-            ctx.globalAlpha = v.trailOpacity;
+            ctx.globalAlpha = v.trailOpacity * b.opacity;
             ctx.stroke();
-            ctx.globalAlpha = 1;
         }
         
         ctx.globalAlpha = b.opacity;
@@ -1199,6 +1198,8 @@ const App: React.FC = () => {
              // If center mode, only draw for the first ball to avoid stacking
              if (c.textPosition === 'center' && index > 0) return;
 
+             ctx.save();
+             ctx.globalAlpha = c.opacity * b.opacity;
              ctx.fillStyle = c.fontColor;
              
              let fontSize = Math.floor(b.radius);
@@ -1225,6 +1226,7 @@ const App: React.FC = () => {
              const ty = c.textPosition === 'center' ? center.y + c.yOffset : b.y;
              
              ctx.fillText(txt, tx, ty);
+             ctx.restore();
         }
     });
 
