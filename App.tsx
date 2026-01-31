@@ -992,7 +992,7 @@ const App: React.FC = () => {
                 if (b.history.length > v.trailLength) b.history.shift();
             }
         }
-        if (c.enabled && !b.isFrozen && !b.isEscaping && c.mode === 'TIMER') {
+        if (cRef.current.enabled && !b.isFrozen && !b.isEscaping && cRef.current.mode === 'TIMER') {
             b.timerFrames = Math.max(0, b.timerFrames - dt);
         }
     });
@@ -1049,38 +1049,71 @@ const App: React.FC = () => {
         const isLocked = p.lockGap && c.mode === 'TIMER' && ballsRef.current.some(b => b.timerFrames > 0 && !b.isFrozen);
         const sweep = 360 - (isLocked ? 0 : v.arcGap);
         const startRad = boundaryAngleRef.current + (v.arcGap/2) * (Math.PI/180);
-        const endRad = startRad + sweep * (Math.PI/180);
-        
-        ctx.beginPath();
-        ctx.arc(center.x, center.y, currentRadius, startRad, endRad);
         
         ctx.lineWidth = v.arcThickness;
         ctx.lineCap = v.lineCap;
-        
-        if (v.arcStyle === 'gradient' && v.arcGradientColors) {
-            const grad = ctx.createLinearGradient(center.x - currentRadius, center.y - currentRadius, center.x + currentRadius, center.y + currentRadius);
-            grad.addColorStop(0, v.arcGradientColors[0]);
-            grad.addColorStop(1, v.arcGradientColors[1]);
-            ctx.strokeStyle = grad;
-        } else if (v.arcStyle === 'multicolor') {
-             ctx.strokeStyle = v.arcPalette[0] || v.arcColor;
+
+        if (v.arcStyle === 'multicolor' || v.arcStyle === 'rainbow') {
+             const segmentCount = v.arcSegments || 12; // Default to 12 if 0
+             const totalSweepRad = sweep * (Math.PI / 180);
+             const segmentAngle = totalSweepRad / segmentCount;
+             
+             for (let i = 0; i < segmentCount; i++) {
+                 const segStart = startRad + i * segmentAngle;
+                 const segEnd = segStart + segmentAngle + 0.01; // Overlap slightly to prevent hairlines
+                 
+                 ctx.beginPath();
+                 ctx.arc(center.x, center.y, currentRadius, segStart, segEnd);
+                 
+                 if (v.arcStyle === 'rainbow') {
+                     ctx.strokeStyle = `hsl(${i * (360 / segmentCount)}, 100%, 50%)`;
+                 } else {
+                     ctx.strokeStyle = v.arcPalette[i % v.arcPalette.length] || v.arcColor;
+                 }
+                 
+                 if (v.glowEffect) {
+                     ctx.shadowBlur = v.glowBlur;
+                     ctx.shadowColor = ctx.strokeStyle as string;
+                 }
+                 
+                 if (flashRef.current > 0) {
+                    ctx.strokeStyle = 'white';
+                    ctx.shadowColor = 'white';
+                    ctx.shadowBlur = v.glowBlur * 2;
+                 }
+                 
+                 ctx.stroke();
+             }
+             ctx.shadowBlur = 0;
         } else {
-             ctx.strokeStyle = v.arcColor;
+            // Standard Solid or Gradient Arc (Single Path)
+            const endRad = startRad + sweep * (Math.PI/180);
+            ctx.beginPath();
+            ctx.arc(center.x, center.y, currentRadius, startRad, endRad);
+            
+            if (v.arcStyle === 'gradient' && v.arcGradientColors) {
+                const grad = ctx.createLinearGradient(center.x - currentRadius, center.y - currentRadius, center.x + currentRadius, center.y + currentRadius);
+                grad.addColorStop(0, v.arcGradientColors[0]);
+                grad.addColorStop(1, v.arcGradientColors[1]);
+                ctx.strokeStyle = grad;
+            } else {
+                 ctx.strokeStyle = v.arcColor;
+            }
+            
+            if (v.glowEffect) {
+                ctx.shadowBlur = v.glowBlur;
+                ctx.shadowColor = ctx.strokeStyle as string;
+            }
+            
+            if (flashRef.current > 0) {
+                ctx.strokeStyle = 'white';
+                ctx.shadowColor = 'white';
+                ctx.shadowBlur = v.glowBlur * 2;
+            }
+            
+            ctx.stroke();
+            ctx.shadowBlur = 0;
         }
-        
-        if (v.glowEffect) {
-            ctx.shadowBlur = v.glowBlur;
-            ctx.shadowColor = ctx.strokeStyle as string;
-        }
-        
-        if (flashRef.current > 0) {
-            ctx.strokeStyle = 'white';
-            ctx.shadowColor = 'white';
-            ctx.shadowBlur = v.glowBlur * 2;
-        }
-        
-        ctx.stroke();
-        ctx.shadowBlur = 0;
     }
 
     // Draw Spikes
