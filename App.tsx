@@ -1152,6 +1152,7 @@ const App: React.FC = () => {
                 
                 ctx.fillStyle = v.spikeColor;
                 if (v.spikeHollow) {
+                    ctx.lineWidth = 3;
                     ctx.strokeStyle = v.spikeColor;
                     ctx.stroke();
                 } else {

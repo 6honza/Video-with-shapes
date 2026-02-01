@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { PhysicsConfig, VisualConfig, CounterConfig, ProductionConfig, ProductionMode, MelodyType, BallShape, SoundWaveform, SpawnType, Template, ArcStyle, LineCapStyle, CounterMode } from '../types';
 import { Palette, Zap, Type, Play, Pause, RefreshCw, Video, Target, Plus, Clapperboard, Waves, Music, RotateCcw, Shapes, Sparkles, Ghost, Gauge, Snowflake, Volume2, Wand2, Dna, Rocket, Skull, Save, Download, Trash, FileJson, Code, HardDrive, Monitor, Layers, Bomb, Upload, Image as ImageIcon, Eye, Grid, X, Calculator, List } from 'lucide-react';
@@ -349,7 +348,7 @@ const ControlPanel: React.FC<Props> = ({
                 <>
                   <Control label="Spike Count" v={visuals.spikeCount} min={1} max={50} step={1} onChange={v => update(visuals, setVisuals, 'spikeCount', v)} />
                   <Control label="Spike Length" v={visuals.spikeLength} min={10} max={100} onChange={v => update(visuals, setVisuals, 'spikeLength', v)} />
-                  <Control label="Spike Width" v={visuals.spikeWidth} min={5} max={50} onChange={v => update(visuals, setVisuals, 'spikeWidth', v)} />
+                  <Control label="Spike Width" v={visuals.spikeWidth} min={5} max={150} onChange={v => update(visuals, setVisuals, 'spikeWidth', v)} />
                   <Toggle label="Hollow Spikes" active={visuals.spikeHollow} onClick={() => update(visuals, setVisuals, 'spikeHollow', !visuals.spikeHollow)} />
                   <Color label="Spike Color" v={visuals.spikeColor} onChange={v => update(visuals, setVisuals, 'spikeColor', v)} />
                 </>
