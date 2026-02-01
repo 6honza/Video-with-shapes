@@ -1146,7 +1146,7 @@ const App: React.FC = () => {
                 
                 ctx.beginPath();
                 ctx.moveTo(-v.spikeWidth/2, 0);
-                ctx.lineTo(0, -v.spikeLength);
+                ctx.lineTo(0, v.spikeLength);
                 ctx.lineTo(v.spikeWidth/2, 0);
                 ctx.closePath();
                 
@@ -1205,7 +1205,20 @@ const App: React.FC = () => {
              ctx.clip();
              ctx.drawImage(ballImgRef.current, -b.radius, -b.radius, b.radius*2, b.radius*2);
         } else {
-            ctx.fillStyle = b.color;
+            // -- Gray on Freeze Logic --
+            if (v.freezeGrayscale && b.isFrozen) {
+                // Approximate desaturation for simplicity and speed
+                const match = b.color.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/);
+                if (match) {
+                     const l = match[3];
+                     ctx.fillStyle = `hsl(0, 0%, ${l}%)`;
+                } else {
+                     ctx.fillStyle = '#888888'; 
+                }
+            } else {
+                ctx.fillStyle = b.color;
+            }
+            
             ctx.beginPath();
             if (b.shape === 'square') ctx.rect(-b.radius, -b.radius, b.radius*2, b.radius*2);
             else if (b.shape === 'triangle') {
@@ -1228,8 +1241,9 @@ const App: React.FC = () => {
 
         // Text
         if (c.enabled && !b.isEscaping && b.opacity > 0.5) {
-             // If center mode, only draw for the first ball to avoid stacking
-             if (c.textPosition === 'center' && index > 0) return;
+             // If center mode, show the timer for the NEWEST ball (the active challenger)
+             // instead of just the first ball to support multi-ball spawning logic properly
+             if (c.textPosition === 'center' && index !== ballsRef.current.length - 1) return;
 
              ctx.save();
              ctx.globalAlpha = c.opacity * b.opacity;
