@@ -29,7 +29,8 @@ const DEFAULT_PHYSICS: PhysicsConfig = {
   spikesActive: false, scriptJSON: '[]',
   soundOnCollision: true, melodyOnCollision: true, baseFreq: 200, freqStep: 15,
   soundVolume: 0.5, soundReverbDuration: 2.0,
-  deterministic: true, physicsSubSteps: 8
+  deterministic: true, physicsSubSteps: 8,
+  soundAttack: 0.01, soundDecay: 0.2, soundPitchRandom: 0
 };
 
 const DEFAULT_VISUALS: VisualConfig = {
@@ -220,6 +221,34 @@ const App: React.FC = () => {
   // Helpers
   const getRandomColor = () => `hsl(${Math.random() * 360}, 100%, 50%)`;
 
+  const getGrayColor = (color: string) => {
+      // Handle HSL
+      const hslMatch = color.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/);
+      if (hslMatch) {
+          return `hsl(0, 0%, ${hslMatch[3]}%)`;
+      }
+      
+      // Handle Hex
+      if (color.startsWith('#')) {
+          let r = 0, g = 0, b = 0;
+          if (color.length === 4) {
+              r = parseInt(color[1] + color[1], 16);
+              g = parseInt(color[2] + color[2], 16);
+              b = parseInt(color[3] + color[3], 16);
+          } else if (color.length === 7) {
+              r = parseInt(color.substring(1, 3), 16);
+              g = parseInt(color.substring(3, 5), 16);
+              b = parseInt(color.substring(5, 7), 16);
+          }
+          // Calculate luminance (perceptual)
+          const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+          return `rgb(${luma}, ${luma}, ${luma})`;
+      }
+      
+      // Fallback
+      return '#888888';
+  };
+
   const playSfx = (ball: Ball | null, forceFreq?: number) => {
     const p = pRef.current;
     const v = vRef.current;
@@ -263,21 +292,32 @@ const App: React.FC = () => {
       const waveType = p.soundWaveform;
       const gain = ctx.createGain();
       const volume = 0.3 * p.soundVolume;
+      const attack = p.soundAttack || 0.01;
+      const decay = p.soundDecay || 0.2;
       
-      gain.gain.setValueAtTime(volume, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (waveType === 'piano' ? 1.0 : 0.2));
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(volume, ctx.currentTime + attack);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + attack + decay);
 
       gain.connect(ctx.destination);
       if (audioDestRef.current) gain.connect(audioDestRef.current);
 
       const osc = ctx.createOscillator(); osc.type = waveType === 'piano' ? 'sine' : waveType;
       osc.frequency.setValueAtTime(freq, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + 0.2);
+      
+      if (p.soundPitchRandom > 0) {
+          const detune = (Math.random() - 0.5) * p.soundPitchRandom;
+          osc.detune.value = detune;
+      }
+      
+      // Slight pitch envelope for percussive effect
+      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + attack + decay);
+      
       osc.connect(gain);
       osc.start(); 
-      osc.stop(ctx.currentTime + 0.25);
+      osc.stop(ctx.currentTime + attack + decay + 0.1);
       
-      setTimeout(() => { try { osc.disconnect(); gain.disconnect(); } catch (e) {} }, 1000);
+      setTimeout(() => { try { osc.disconnect(); gain.disconnect(); } catch (e) {} }, (attack + decay + 0.2) * 1000);
 
       if (p.soundReverb && reverbNodeRef.current) {
         const reverbGain = ctx.createGain(); reverbGain.gain.value = 0.4 * p.soundVolume;
@@ -1208,14 +1248,7 @@ const App: React.FC = () => {
         } else {
             // -- Gray on Freeze Logic --
             if (v.freezeGrayscale && b.isFrozen) {
-                // Approximate desaturation for simplicity and speed
-                const match = b.color.match(/hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)/);
-                if (match) {
-                     const l = match[3];
-                     ctx.fillStyle = `hsl(0, 0%, ${l}%)`;
-                } else {
-                     ctx.fillStyle = '#888888'; 
-                }
+                ctx.fillStyle = getGrayColor(b.color);
             } else {
                 ctx.fillStyle = b.color;
             }
@@ -1283,7 +1316,15 @@ const App: React.FC = () => {
         ctx.fillStyle = v.overlayTextColor;
         ctx.font = `${v.overlayFontWeight} ${v.overlayFontSize}px ${cRef.current.fontFamily}`;
         ctx.textAlign = 'center';
-        ctx.fillText(v.overlayText, center.x, center.y + v.overlayTextY);
+        
+        const lines = v.overlayText.split('\n');
+        const lineHeight = v.overlayFontSize * 1.2;
+        const totalHeight = lines.length * lineHeight;
+        const startY = (center.y + v.overlayTextY) - (totalHeight / 2) + (lineHeight / 2);
+
+        lines.forEach((line, i) => {
+            ctx.fillText(line, center.x, startY + (i * lineHeight));
+        });
     }
 
     // End Text

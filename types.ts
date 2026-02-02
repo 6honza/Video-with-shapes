@@ -39,6 +39,9 @@ export interface PhysicsConfig {
   soundReverbDuration: number;
   deterministic: boolean; // No randomness
   physicsSubSteps: number;
+  soundAttack: number;
+  soundDecay: number;
+  soundPitchRandom: number;
 }
 
 export interface VisualConfig {

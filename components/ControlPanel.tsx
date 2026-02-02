@@ -371,6 +371,12 @@ const ControlPanel: React.FC<Props> = ({
               
               <Control label="Base Pitch (Hz)" v={physics.baseFreq} min={50} max={1000} onChange={v => update(physics, setPhysics, 'baseFreq', v)} />
               <Control label="Pitch Step (Hz)" v={physics.freqStep} min={0} max={100} onChange={v => update(physics, setPhysics, 'freqStep', v)} />
+              <Control label="Pitch Chaos" v={physics.soundPitchRandom} min={0} max={1000} step={10} onChange={v => update(physics, setPhysics, 'soundPitchRandom', v)} />
+              
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                 <Control label="Attack (s)" v={physics.soundAttack} min={0.001} max={0.5} step={0.001} onChange={v => update(physics, setPhysics, 'soundAttack', v)} />
+                 <Control label="Decay (s)" v={physics.soundDecay} min={0.01} max={1.0} step={0.01} onChange={v => update(physics, setPhysics, 'soundDecay', v)} />
+              </div>
 
               <div className="grid grid-cols-5 gap-2 mt-4 mb-4">
                 {(['sine', 'square', 'sawtooth', 'triangle', 'piano'] as SoundWaveform[]).map(w => (
@@ -449,9 +455,9 @@ const ControlPanel: React.FC<Props> = ({
                   className="w-full h-16 p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold text-white outline-none focus:border-indigo-500 transition-colors" 
                 />
                 <Control label="Duration (s)" v={visuals.endSceneDuration || 4.0} min={1} max={10} step={0.1} onChange={v => update(visuals, setVisuals, 'endSceneDuration', v)} />
-            </Section>
-            
-            <Section icon={Type} label="Overlays">
+             </Section>
+             
+             <Section icon={Type} label="Overlays">
               <textarea 
                 value={visuals.overlayText} 
                 onChange={e => update(visuals, setVisuals, 'overlayText', e.target.value)} 
@@ -467,153 +473,110 @@ const ControlPanel: React.FC<Props> = ({
                   <input type="text" value={visuals.overlayFontWeight} onChange={e => update(visuals, setVisuals, 'overlayFontWeight', e.target.value)} className="w-full p-2 bg-white/5 rounded-lg text-xs font-bold text-zinc-200 outline-none border border-white/5 focus:border-indigo-500 transition-all" />
               </div>
             </Section>
-            
-            <Section icon={RefreshCw} label="Dynamic Counter / Timer">
-              <Toggle label="Enable Display" active={counter.enabled} onClick={() => update(counter, setCounter, 'enabled', !counter.enabled)} />
-              
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                  {(['TIMER', 'SEQUENCE', 'LINEAR', 'EXPONENTIAL'] as CounterMode[]).map(m => (
-                      <button key={m} onClick={() => update(counter, setCounter, 'mode', m)} className={`py-2 px-1 text-[8px] font-black uppercase rounded-xl border transition-all ${counter.mode === m ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-white/5 border-white/5 text-zinc-500'}`}>
-                          {m === 'EXPONENTIAL' ? 'EXP' : m}
-                      </button>
-                  ))}
-              </div>
 
-              {counter.mode === 'TIMER' && (
-                 <Control label="Duration (Seconds)" v={counter.seconds} min={1} max={60} onChange={v => update(counter, setCounter, 'seconds', v)} />
-              )}
-              
-              {counter.mode === 'SEQUENCE' && (
-                  <div className="mb-4">
-                      <p className="text-[9px] text-zinc-500 mb-1">Comma separated values (e.g. 1, 2, 4, 8)</p>
-                      <textarea 
-                        value={counter.sequenceStr} 
-                        onChange={e => update(counter, setCounter, 'sequenceStr', e.target.value)} 
-                        className="w-full h-20 p-2 bg-white/5 rounded-lg text-xs font-mono border border-white/5 outline-none"
-                      />
-                  </div>
-              )}
-
-              {counter.mode === 'LINEAR' && (
-                  <>
-                    <Control label="Start Value" v={counter.mathStart} min={0} max={1000} onChange={v => update(counter, setCounter, 'mathStart', v)} />
-                    <Control label="Step (Add)" v={counter.mathStep} min={1} max={100} onChange={v => update(counter, setCounter, 'mathStep', v)} />
-                  </>
-              )}
-
-              {counter.mode === 'EXPONENTIAL' && (
-                   <>
-                    <Control label="Start Value" v={counter.mathStart} min={1} max={1000} onChange={v => update(counter, setCounter, 'mathStart', v)} />
-                    <Control label="Factor (Multiply)" v={counter.mathFactor} min={1.01} max={10} step={0.01} onChange={v => update(counter, setCounter, 'mathFactor', v)} />
-                  </>
-              )}
-
-              <div className="space-y-1 mb-3">
-                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">Font Family</span>
-                  <input type="text" value={counter.fontFamily} onChange={e => update(counter, setCounter, 'fontFamily', e.target.value)} className="w-full p-2 bg-white/5 rounded-lg text-xs font-bold text-zinc-200 outline-none border border-white/5 focus:border-indigo-500 transition-all" />
-              </div>
-               <div className="space-y-1 mb-3">
-                  <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">Font Weight (300-900)</span>
-                  <input type="text" value={counter.fontWeight} onChange={e => update(counter, setCounter, 'fontWeight', e.target.value)} className="w-full p-2 bg-white/5 rounded-lg text-xs font-bold text-zinc-200 outline-none border border-white/5 focus:border-indigo-500 transition-all" />
-              </div>
-              <Control label="Size (Scale)" v={counter.fontSize} min={50} max={500} onChange={v => update(counter, setCounter, 'fontSize', v)} />
-              <Control label="Opacity" v={counter.opacity} min={0} max={1} step={0.01} onChange={v => update(counter, setCounter, 'opacity', v)} />
-              <Control label="Position Y" v={counter.yOffset} min={-600} max={600} onChange={v => update(counter, setCounter, 'yOffset', v)} />
-
-              <div className="grid grid-cols-2 gap-2 mb-4">
-                  <button onClick={() => update(counter, setCounter, 'textPosition', 'ball')} className={`py-2 px-1 text-[8px] font-black uppercase rounded-xl border transition-all ${counter.textPosition === 'ball' ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-white/5 border-white/5 text-zinc-500'}`}>
-                      On Ball
-                  </button>
-                  <button onClick={() => update(counter, setCounter, 'textPosition', 'center')} className={`py-2 px-1 text-[8px] font-black uppercase rounded-xl border transition-all ${counter.textPosition === 'center' ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-white/5 border-white/5 text-zinc-500'}`}>
-                      Center
-                  </button>
-              </div>
-
-              <Toggle label="Show Decimals" active={counter.showDecimals} onClick={() => update(counter, setCounter, 'showDecimals', !counter.showDecimals)} />
-            </Section>
+             <Section icon={Type} label="Countdown / Counter">
+                <Toggle label="Enabled" active={counter.enabled} onClick={() => update(counter, setCounter, 'enabled', !counter.enabled)} />
+                {counter.enabled && (
+                    <>
+                        <div className="grid grid-cols-2 gap-2 mb-4">
+                           {(['TIMER', 'SEQUENCE', 'LINEAR', 'EXPONENTIAL'] as CounterMode[]).map(m => (
+                               <button key={m} onClick={() => update(counter, setCounter, 'mode', m)} className={`py-2 text-[8px] font-black uppercase rounded-lg border transition-all ${counter.mode === m ? 'bg-indigo-600 border-indigo-400 text-white' : 'bg-white/5 border-white/5 text-zinc-500'}`}>
+                                   {m}
+                               </button>
+                           ))}
+                        </div>
+                        
+                        {counter.mode === 'TIMER' && (
+                            <Control label="Seconds" v={counter.seconds} min={1} max={300} onChange={v => update(counter, setCounter, 'seconds', v)} />
+                        )}
+                        {counter.mode === 'SEQUENCE' && (
+                             <div className="mb-4">
+                                 <span className="text-[10px] font-black uppercase text-zinc-500 tracking-wider">Sequence (CSV)</span>
+                                 <input type="text" value={counter.sequenceStr} onChange={e => update(counter, setCounter, 'sequenceStr', e.target.value)} className="w-full p-2 mt-1 bg-white/5 border border-white/5 rounded text-[10px] font-mono" />
+                             </div>
+                        )}
+                        {(counter.mode === 'LINEAR' || counter.mode === 'EXPONENTIAL') && (
+                             <>
+                                <Control label="Start Value" v={counter.mathStart} min={0} max={100} onChange={v => update(counter, setCounter, 'mathStart', v)} />
+                                {counter.mode === 'LINEAR' && <Control label="Step" v={counter.mathStep} min={-100} max={100} onChange={v => update(counter, setCounter, 'mathStep', v)} />}
+                                {counter.mode === 'EXPONENTIAL' && <Control label="Factor" v={counter.mathFactor} min={0} max={10} step={0.1} onChange={v => update(counter, setCounter, 'mathFactor', v)} />}
+                             </>
+                        )}
+                        
+                        <div className="border-t border-white/5 pt-4 mt-4">
+                            <Control label="Font Size" v={counter.fontSize} min={10} max={500} onChange={v => update(counter, setCounter, 'fontSize', v)} />
+                            <Control label="Vertical Offset" v={counter.yOffset} min={-500} max={500} onChange={v => update(counter, setCounter, 'yOffset', v)} />
+                            <Control label="Opacity" v={counter.opacity} min={0} max={1} step={0.01} onChange={v => update(counter, setCounter, 'opacity', v)} />
+                            <Toggle label="Show Decimals" active={counter.showDecimals} onClick={() => update(counter, setCounter, 'showDecimals', !counter.showDecimals)} />
+                             <div className="grid grid-cols-2 gap-2 mt-2">
+                                <button onClick={() => update(counter, setCounter, 'textPosition', 'ball')} className={`py-2 text-[8px] font-black uppercase rounded-lg border ${counter.textPosition === 'ball' ? 'bg-indigo-600 border-indigo-400' : 'bg-white/5 border-white/5'}`}>On Ball</button>
+                                <button onClick={() => update(counter, setCounter, 'textPosition', 'center')} className={`py-2 text-[8px] font-black uppercase rounded-lg border ${counter.textPosition === 'center' ? 'bg-indigo-600 border-indigo-400' : 'bg-white/5 border-white/5'}`}>In Center</button>
+                            </div>
+                        </div>
+                    </>
+                )}
+             </Section>
           </div>
         )}
 
         {tab === 'prd' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
-            <Section icon={Clapperboard} label="Video Output">
-               <Control label="Min Duration (s)" v={production.minVideoDuration} min={0} max={60} step={1} onChange={v => update(production, setProduction, 'minVideoDuration', v)} />
-               <Control label="Max Limit (s)" v={production.maxVideoDuration} min={10} max={300} step={5} onChange={v => update(production, setProduction, 'maxVideoDuration', v)} />
-               <p className="text-[9px] text-zinc-500 mt-[-10px] mb-2">Videos shorter than Min or longer than Max will be discarded.</p>
-               
-               <Control label="Batch Count" v={production.batchCount} min={1} max={50} step={1} onChange={v => update(production, setProduction, 'batchCount', v)} />
-               <Toggle label="Force Vertical HD (9:16)" active={production.forceHD} onClick={() => update(production, setProduction, 'forceHD', !production.forceHD)} />
-               <Control label="Resolution Scale" v={production.resolutionScale} min={0.5} max={2.0} step={0.1} onChange={v => update(production, setProduction, 'resolutionScale', v)} />
-               <Toggle label="Preview Before Save" active={production.previewBeforeSave} onClick={() => update(production, setProduction, 'previewBeforeSave', !production.previewBeforeSave)} />
-               <Toggle label="Auto Save File" active={production.autoSave} onClick={() => update(production, setProduction, 'autoSave', !production.autoSave)} />
-            </Section>
-            
-             <Section icon={Sparkles} label="Cinematics">
-               <Toggle label="Cinematic Out (Zoom)" active={production.cinematicOut} onClick={() => update(production, setProduction, 'cinematicOut', !production.cinematicOut)} />
-               {production.cinematicOut && (
-                  <>
-                     <Control label="Zoom Speed" v={production.cinematicZoomSpeed} min={0.001} max={0.02} step={0.001} onChange={v => update(production, setProduction, 'cinematicZoomSpeed', v)} />
-                     <Toggle label="End Dust Particles" active={production.cinematicDust} onClick={() => update(production, setProduction, 'cinematicDust', !production.cinematicDust)} />
-                  </>
-               )}
-               <Toggle label="Explosion on End" active={production.cinematicExplosion} onClick={() => update(production, setProduction, 'cinematicExplosion', !production.cinematicExplosion)} />
-             </Section>
-             
-             <div className="pt-4 border-t border-white/5 space-y-3">
-                <button 
-                  onClick={() => setIsRunning(!isRunning)} 
-                  disabled={isRecording}
-                  className="w-full py-4 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-                >
-                   {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />} Test Simulation (No Record)
-                </button>
-             
-                <button 
-                  onClick={() => isRecording ? null : onStartBatch()} 
-                  className={`w-full py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-all ${isRecording ? 'bg-red-500/20 text-red-500 animate-pulse' : 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-600/20'}`}
-                >
-                  {isRecording ? `Recording... ${currentTake}` : 'Start Batch Recording'}
-                </button>
-                {lastBlobUrl && (
-                    <button onClick={onManualDownload} className="w-full mt-2 py-3 bg-emerald-600/20 text-emerald-500 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600/30 transition-all flex items-center justify-center gap-2">
-                        <Download className="w-3 h-3" /> Download Last Video
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                <Section icon={Clapperboard} label="Video Production">
+                    <Control label="Max Duration (s)" v={production.maxVideoDuration} min={0} max={300} onChange={v => update(production, setProduction, 'maxVideoDuration', v)} />
+                    <Control label="Resolution Scale" v={production.resolutionScale} min={0.5} max={3.0} step={0.1} onChange={v => update(production, setProduction, 'resolutionScale', v)} />
+                    <Toggle label="Force 9:16 HD (1080x1920)" active={production.forceHD} onClick={() => update(production, setProduction, 'forceHD', !production.forceHD)} />
+                    <Toggle label="Cinematic Zoom Out" active={production.cinematicOut} onClick={() => update(production, setProduction, 'cinematicOut', !production.cinematicOut)} />
+                    {production.cinematicOut && (
+                        <Control label="Zoom Speed" v={production.cinematicZoomSpeed} min={0.001} max={0.05} step={0.001} onChange={v => update(production, setProduction, 'cinematicZoomSpeed', v)} />
+                    )}
+                    <Toggle label="Cinematic Dust" active={production.cinematicDust} onClick={() => update(production, setProduction, 'cinematicDust', !production.cinematicDust)} />
+                    <Toggle label="Cinematic Explosion" active={production.cinematicExplosion} onClick={() => update(production, setProduction, 'cinematicExplosion', !production.cinematicExplosion)} />
+                </Section>
+                
+                <Section icon={Layers} label="Batch & Automation">
+                    <Control label="Batch Count" v={production.batchCount} min={1} max={100} step={1} onChange={v => update(production, setProduction, 'batchCount', v)} />
+                    <Toggle label="Auto Save" active={production.autoSave} onClick={() => update(production, setProduction, 'autoSave', !production.autoSave)} />
+                    <Toggle label="Preview Before Save" active={production.previewBeforeSave} onClick={() => update(production, setProduction, 'previewBeforeSave', !production.previewBeforeSave)} />
+                    
+                    <button 
+                        onClick={onStartBatch}
+                        className={`w-full py-4 mt-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${isRecording ? 'bg-red-600 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-500'}`}
+                    >
+                        {isRecording ? `Recording... (Take ${currentTake})` : 'Start Batch Recording'}
                     </button>
-                )}
-             </div>
-          </div>
+                </Section>
+            </div>
+        )}
+        
+        {tab === 'ai' && (
+            <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
+                 <Section icon={Wand2} label="AI Generator">
+                     <p className="text-[10px] text-zinc-500 mb-2">Describe the physics and visuals you want.</p>
+                     <textarea 
+                        value={aiPrompt}
+                        onChange={e => setAiPrompt(e.target.value)}
+                        placeholder="e.g., fast heavy balls with red neon glow and square shape"
+                        className="w-full h-32 p-4 bg-white/5 border border-white/10 rounded-2xl text-xs text-white outline-none focus:border-indigo-500 transition-colors"
+                     />
+                     <button onClick={handleAiGenerate} className="w-full py-4 bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl font-bold uppercase tracking-widest text-[10px] hover:opacity-90 transition-opacity">
+                         Generate Settings
+                     </button>
+                 </Section>
+            </div>
         )}
 
-        {tab === 'ai' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-2">
-             <Section icon={Wand2} label="AI Generator">
-                <textarea 
-                  value={aiPrompt} 
-                  onChange={e => setAiPrompt(e.target.value)} 
-                  placeholder="Describe your physics simulation... (e.g. 'fast red ball with high gravity')" 
-                  className="w-full h-32 p-4 bg-white/5 border border-white/10 rounded-2xl text-xs font-bold text-white outline-none focus:border-indigo-500 transition-colors mb-4" 
-                />
-                <button onClick={handleAiGenerate} className="w-full py-4 bg-indigo-600 rounded-xl font-black uppercase tracking-widest text-xs text-white hover:bg-indigo-500 shadow-lg transition-all flex items-center justify-center gap-2">
-                    <Sparkles className="w-4 h-4" /> Generate Settings
-                </button>
-             </Section>
-          </div>
-        )}
       </div>
 
-      <div className="p-6 bg-black/40 border-t border-white/5 flex gap-3">
-          <button 
-            onClick={() => setIsRunning(!isRunning)} 
-            className={`flex-1 py-4 rounded-xl font-black uppercase tracking-widest text-xs transition-all flex items-center justify-center gap-2 ${isRunning ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-black hover:bg-zinc-200'}`}
-          >
-             {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />} {isRunning ? 'Pause' : 'Play'}
-          </button>
-          <button 
-            onClick={onReset} 
-            className="px-6 py-4 bg-white/5 border border-white/10 rounded-xl text-white hover:bg-white/10 transition-all flex items-center justify-center"
-            title="Reset Simulation"
-          >
-             <RefreshCw className="w-5 h-5" />
-          </button>
+      <div className="p-6 border-t border-white/5 bg-black/20 backdrop-blur-sm">
+         <div className="flex gap-2">
+            <button onClick={() => setIsRunning(!isRunning)} className={`flex-1 py-4 rounded-xl flex items-center justify-center gap-2 font-bold uppercase tracking-widest text-[10px] transition-all ${isRunning ? 'bg-zinc-800 text-zinc-400' : 'bg-white text-black hover:bg-zinc-200'}`}>
+                {isRunning ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                {isRunning ? 'Pause' : 'Start'}
+            </button>
+            <button onClick={onReset} className="w-14 bg-white/10 rounded-xl flex items-center justify-center hover:bg-white/20 transition-colors">
+                <RotateCcw className="w-4 h-4" />
+            </button>
+         </div>
       </div>
     </div>
   );
