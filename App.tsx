@@ -302,7 +302,10 @@ const App: React.FC = () => {
       gain.connect(ctx.destination);
       if (audioDestRef.current) gain.connect(audioDestRef.current);
 
-      const osc = ctx.createOscillator(); osc.type = waveType === 'piano' ? 'sine' : waveType;
+      const osc = ctx.createOscillator(); 
+      // Use triangle for 'piano' type for richer sound, otherwise use selected wave
+      osc.type = waveType === 'piano' ? 'triangle' : waveType;
+      
       osc.frequency.setValueAtTime(freq, ctx.currentTime);
       
       if (p.soundPitchRandom > 0) {
@@ -310,8 +313,8 @@ const App: React.FC = () => {
           osc.detune.value = detune;
       }
       
-      // Slight pitch envelope for percussive effect
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + attack + decay);
+      // Removed the aggressive pitch drop that was making melodies sound like lasers/drums
+      // osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + attack + decay);
       
       osc.connect(gain);
       osc.start(); 
