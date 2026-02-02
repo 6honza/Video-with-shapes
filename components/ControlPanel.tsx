@@ -402,7 +402,9 @@ const ControlPanel: React.FC<Props> = ({
             </Section>
             
             <Section icon={Code} label="Scripting (Adv)">
-              <p className="text-[9px] text-zinc-500 mb-2">JSON Events: [{"time":5, "type":"gravity", "value":1.5}]</p>
+              <p className="text-[9px] text-zinc-500 mb-2">
+  {`JSON Events: [{"time":5, "type":"gravity", "value":1.5}]`}
+</p>
               <textarea 
                 value={physics.scriptJSON} 
                 onChange={e => update(physics, setPhysics, 'scriptJSON', e.target.value)} 
