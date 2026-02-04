@@ -419,10 +419,13 @@ const App: React.FC = () => {
   };
 
   const resetSimulation = useCallback(() => {
+    let targetVisuals = vRef.current;
+    
     if (customDefaults) {
         setPhysics(customDefaults.p);
         setVisuals(customDefaults.v);
         setCounter(customDefaults.c);
+        targetVisuals = customDefaults.v;
     }
     
     ballsRef.current = [];
@@ -436,8 +439,12 @@ const App: React.FC = () => {
     opacityRef.current = 1;
     cameraShakeRef.current = 0;
     simulationTimeRef.current = 0;
-    boundaryAngleRef.current = (vRef.current.arcInitialAngle || 0) * (Math.PI / 180); // Reset to specific angle
-    spikeAngleRef.current = (vRef.current.arcInitialAngle || 0) * (Math.PI / 180);
+    
+    // Explicitly set the rotation angles from the persisted VisualConfig
+    // This ensures consistency whether it came from drag (via onPointerUp) or manual slider
+    boundaryAngleRef.current = (targetVisuals.arcInitialAngle || 0) * (Math.PI / 180);
+    spikeAngleRef.current = (targetVisuals.arcInitialAngle || 0) * (Math.PI / 180);
+    
     scriptExecutedRef.current.clear();
     
     spawn();
@@ -1270,28 +1277,21 @@ const App: React.FC = () => {
         const interval = (Math.PI * 2) / spikeCount;
         
         // Spike visual check needs to align with gap center logic
-        // Gap is at boundaryAngleRef.current OR spikeAngleRef if independent
-        
+        // Gap is at boundaryAngleRef.current.
+        // Solid is outside [-gap/2, gap/2] relative to that.
         const isLocked = p.lockGap && c.mode === 'TIMER' && ballsRef.current.some(b => b.timerFrames > 0 && !b.isFrozen);
         const currentGap = isLocked ? 0 : v.arcGap;
         const gapRad = currentGap * (Math.PI / 180);
-        const currentSpikeBase = spikeAngleRef.current;
 
         for (let i = 0; i < spikeCount; i++) {
-            const ang = currentSpikeBase + i * interval;
+            const ang = boundaryAngleRef.current + i * interval;
             
-            // Check if spike is in solid region of ARC (if not independent)
-            // If independent, spikes draw regardless of gap (unless you want complex logic, but standard is they float)
-            let shouldDraw = true;
+            // Check if spike is in solid region
+            let rel = (ang - boundaryAngleRef.current) % (Math.PI * 2);
+            if (rel < 0) rel += Math.PI * 2;
+            if (rel > Math.PI) rel -= 2 * Math.PI; // -PI to PI
             
-            if (!v.independentSpikes) {
-                let rel = (ang - boundaryAngleRef.current) % (Math.PI * 2);
-                if (rel < 0) rel += Math.PI * 2;
-                if (rel > Math.PI) rel -= 2 * Math.PI; // -PI to PI
-                if (Math.abs(rel) <= gapRad / 2) shouldDraw = false;
-            }
-
-            if (shouldDraw) {
+            if (Math.abs(rel) > gapRad / 2) {
                 const sx = center.x + Math.cos(ang) * (currentRadius - v.arcThickness/2);
                 const sy = center.y + Math.sin(ang) * (currentRadius - v.arcThickness/2);
                 
@@ -1501,8 +1501,26 @@ const App: React.FC = () => {
                 lastDragAngleRef.current = currentAngle;
              }
           }}
-          onPointerUp={() => isDraggingRef.current = false}
-          onPointerLeave={() => isDraggingRef.current = false}
+          onPointerUp={() => {
+            if (isDraggingRef.current) {
+                isDraggingRef.current = false;
+                // Save the new angle as the initial angle for resets
+                let deg = (boundaryAngleRef.current * 180 / Math.PI) % 360;
+                if (deg < 0) deg += 360;
+                deg = Math.round(deg);
+                setVisuals(prev => ({ ...prev, arcInitialAngle: deg }));
+            }
+          }}
+          onPointerLeave={() => {
+            if (isDraggingRef.current) {
+                isDraggingRef.current = false;
+                // Save on leave as well to prevent snapping back if mouse exits canvas
+                let deg = (boundaryAngleRef.current * 180 / Math.PI) % 360;
+                if (deg < 0) deg += 360;
+                deg = Math.round(deg);
+                setVisuals(prev => ({ ...prev, arcInitialAngle: deg }));
+            }
+          }}
         />
         <ControlPanel 
             physics={physics} setPhysics={setPhysics}
