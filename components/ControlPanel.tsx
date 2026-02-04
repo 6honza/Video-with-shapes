@@ -179,7 +179,8 @@ const ControlPanel: React.FC<Props> = ({
             <Section icon={Eye} label="Preparation">
                 <Toggle label="Show Ghost Spawn" active={visuals.showSpawnPreview} onClick={() => update(visuals, setVisuals, 'showSpawnPreview', !visuals.showSpawnPreview)} />
                 <Toggle label="Show Trajectory" active={visuals.showTrajectory} onClick={() => update(visuals, setVisuals, 'showTrajectory', !visuals.showTrajectory)} />
-                <p className="text-[9px] text-zinc-500 mt-1">Trajectory shows only when paused and 'Ghost Spawn' is enabled.</p>
+                <Control label="Reset Alignment Angle" v={visuals.arcInitialAngle || 0} min={0} max={360} onChange={v => update(visuals, setVisuals, 'arcInitialAngle', v)} />
+                <p className="text-[9px] text-zinc-500 mt-1">Sets exact ring rotation on reset.</p>
             </Section>
 
             <Section icon={Shapes} label="Shape & Ball">
@@ -234,7 +235,7 @@ const ControlPanel: React.FC<Props> = ({
                   </div>
               )}
               
-              {(visuals.arcStyle === 'multicolor' || visuals.arcStyle === 'segmented') && (
+              {visuals.arcStyle === 'multicolor' && (
                   <div className="mb-4 space-y-2 p-3 bg-white/5 rounded-xl border border-white/5">
                       <div className="flex justify-between items-center mb-2">
                           <span className="text-[9px] font-bold uppercase text-zinc-400">Palette Colors</span>
@@ -263,7 +264,12 @@ const ControlPanel: React.FC<Props> = ({
               <Control label="Circle Radius" v={visuals.arcRadius} min={100} max={600} onChange={v => update(visuals, setVisuals, 'arcRadius', v)} />
               <Control label="Thickness" v={visuals.arcThickness} min={1} max={100} onChange={v => update(visuals, setVisuals, 'arcThickness', v)} />
               <Control label="Line Gap" v={visuals.arcGap} min={0} max={359} onChange={v => update(visuals, setVisuals, 'arcGap', v)} />
-              <Control label="Rotate Speed" v={visuals.rotationSpeed} min={-0.1} max={0.1} step={0.001} onChange={v => update(visuals, setVisuals, 'rotationSpeed', v)} />
+              
+              <div className="grid grid-cols-2 gap-2 mt-4">
+                 <Toggle label="Spin Arc" active={visuals.arcRotationEnabled} onClick={() => update(visuals, setVisuals, 'arcRotationEnabled', !visuals.arcRotationEnabled)} />
+                 <Control label="Speed" v={visuals.rotationSpeed} min={-0.1} max={0.1} step={0.001} onChange={v => update(visuals, setVisuals, 'rotationSpeed', v)} />
+              </div>
+
               <Toggle label="9:16 Frame" active={visuals.show916Frame} onClick={() => update(visuals, setVisuals, 'show916Frame', !visuals.show916Frame)} />
               
               <div className="mt-4 pt-4 border-t border-white/5">
@@ -280,6 +286,9 @@ const ControlPanel: React.FC<Props> = ({
 
             <Section icon={Sparkles} label="Cinematics">
               <Toggle label="Glow FX" active={visuals.glowEffect} onClick={() => update(visuals, setVisuals, 'glowEffect', !visuals.glowEffect)} />
+              {visuals.glowEffect && (
+                  <Toggle label="Keep Glow When Frozen" active={visuals.glowOnFrozen} onClick={() => update(visuals, setVisuals, 'glowOnFrozen', !visuals.glowOnFrozen)} />
+              )}
               <Toggle label="Gray on Freeze" active={visuals.freezeGrayscale} onClick={() => update(visuals, setVisuals, 'freezeGrayscale', !visuals.freezeGrayscale)} />
               <Toggle label="Show Trails" active={visuals.showTrail} onClick={() => update(visuals, setVisuals, 'showTrail', !visuals.showTrail)} />
               <Control label="Trail Length" v={visuals.trailLength} min={0} max={100} onChange={v => update(visuals, setVisuals, 'trailLength', v)} />
@@ -333,7 +342,13 @@ const ControlPanel: React.FC<Props> = ({
               <Control label="Gravity" v={physics.gravityY} min={0} max={2} step={0.01} onChange={v => update(physics, setPhysics, 'gravityY', v)} />
               <Control label="Bounciness" v={physics.restitution} min={0.5} max={1.5} step={0.01} onChange={v => update(physics, setPhysics, 'restitution', v)} />
               <Control label="Bounce Speed Up" v={physics.speedIncreaseOnBounce} min={0} max={0.1} step={0.001} onChange={v => update(physics, setPhysics, 'speedIncreaseOnBounce', v)} />
-              <Toggle label="Random Color on Hit" active={physics.colorChangeOnBounce} onClick={() => update(physics, setPhysics, 'colorChangeOnBounce', !physics.colorChangeOnBounce)} />
+              <Control label="Friction / Air Drag" v={1 - physics.drag} min={0} max={0.1} step={0.0001} onChange={v => update(physics, setPhysics, 'drag', 1 - v)} />
+              
+              <div className="mt-4 pt-4 border-t border-white/5">
+                  <p className="text-[9px] text-zinc-500 mb-2 font-bold uppercase">Chaos & Realism</p>
+                  <Control label="Bounce Randomness" v={physics.collisionScatter} min={0} max={1.0} step={0.01} onChange={v => update(physics, setPhysics, 'collisionScatter', v)} />
+                  <Toggle label="Random Color on Hit" active={physics.colorChangeOnBounce} onClick={() => update(physics, setPhysics, 'colorChangeOnBounce', !physics.colorChangeOnBounce)} />
+              </div>
             </Section>
 
             <Section icon={Snowflake} label="Logic & Freeze">
@@ -346,6 +361,13 @@ const ControlPanel: React.FC<Props> = ({
               <Toggle label="Enable Spikes" active={physics.spikesActive} onClick={() => update(physics, setPhysics, 'spikesActive', !physics.spikesActive)} />
               {physics.spikesActive && (
                 <>
+                  <Toggle label="Precise Hitbox" active={physics.preciseSpikeCollision} onClick={() => update(physics, setPhysics, 'preciseSpikeCollision', !physics.preciseSpikeCollision)} />
+                  <div className="mt-2 mb-2 p-3 bg-white/5 rounded-xl">
+                      <Toggle label="Independent Spin" active={visuals.independentSpikes} onClick={() => update(visuals, setVisuals, 'independentSpikes', !visuals.independentSpikes)} />
+                      {visuals.independentSpikes && (
+                          <Control label="Spike Speed" v={visuals.spikeRotationSpeed} min={-0.2} max={0.2} step={0.001} onChange={v => update(visuals, setVisuals, 'spikeRotationSpeed', v)} />
+                      )}
+                  </div>
                   <Control label="Spike Count" v={visuals.spikeCount} min={1} max={50} step={1} onChange={v => update(visuals, setVisuals, 'spikeCount', v)} />
                   <Control label="Spike Length" v={visuals.spikeLength} min={10} max={100} onChange={v => update(visuals, setVisuals, 'spikeLength', v)} />
                   <Control label="Spike Width" v={visuals.spikeWidth} min={5} max={150} onChange={v => update(visuals, setVisuals, 'spikeWidth', v)} />
@@ -402,9 +424,7 @@ const ControlPanel: React.FC<Props> = ({
             </Section>
             
             <Section icon={Code} label="Scripting (Adv)">
-              <p className="text-[9px] text-zinc-500 mb-2">
-  {`JSON Events: [{"time":5, "type":"gravity", "value":1.5}]`}
-</p>
+              <p className="text-[9px] text-zinc-500 mb-2">JSON Events: [{"time":5, "type":"gravity", "value":1.5}]</p>
               <textarea 
                 value={physics.scriptJSON} 
                 onChange={e => update(physics, setPhysics, 'scriptJSON', e.target.value)} 

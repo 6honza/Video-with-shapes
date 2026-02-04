@@ -42,6 +42,8 @@ export interface PhysicsConfig {
   soundAttack: number;
   soundDecay: number;
   soundPitchRandom: number;
+  collisionScatter: number; // Adds randomness to ball collisions
+  preciseSpikeCollision: boolean; // Uses raycasting/triangle check instead of sector
 }
 
 export interface VisualConfig {
@@ -59,11 +61,13 @@ export interface VisualConfig {
   arcSegments: number; // For multicolor
   lineCap: LineCapStyle;
   rotationSpeed: number;
+  arcRotationEnabled: boolean; // Toggle arc spinning
   trailLength: number;
   trailWidth: number;
   trailOpacity: number;
   showTrail: boolean;
   glowEffect: boolean;
+  glowOnFrozen: boolean; // Toggle glow when frozen
   glowBlur: number;
   glowIntensity: number;
   backgroundColor: string;
@@ -80,6 +84,8 @@ export interface VisualConfig {
   spikeWidth: number;
   spikeHollow: boolean;
   spikeColor: string;
+  independentSpikes: boolean; // Spikes spin separately
+  spikeRotationSpeed: number;
   show916Frame: boolean;
   melody: MelodyType;
   customMelody: string; 
@@ -94,6 +100,7 @@ export interface VisualConfig {
   centerImage: string; 
   showSpawnPreview: boolean;
   showTrajectory: boolean;
+  arcInitialAngle: number; // Reset position
 }
 
 export interface CounterConfig {

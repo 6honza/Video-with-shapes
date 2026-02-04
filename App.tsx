@@ -30,7 +30,8 @@ const DEFAULT_PHYSICS: PhysicsConfig = {
   soundOnCollision: true, melodyOnCollision: true, baseFreq: 200, freqStep: 15,
   soundVolume: 0.5, soundReverbDuration: 2.0,
   deterministic: true, physicsSubSteps: 8,
-  soundAttack: 0.01, soundDecay: 0.2, soundPitchRandom: 0
+  soundAttack: 0.01, soundDecay: 0.2, soundPitchRandom: 0,
+  collisionScatter: 0.2, preciseSpikeCollision: true
 };
 
 const DEFAULT_VISUALS: VisualConfig = {
@@ -38,12 +39,13 @@ const DEFAULT_VISUALS: VisualConfig = {
   arcColor: '#ff0055', arcStyle: 'gradient', arcPalette: ['#ff0055', '#7000ff', '#00ffcc', '#ffff00'],
   arcGradientEnabled: true, arcGradientColors: ['#ff0055', '#7000ff'],
   arcThickness: 50, arcRadius: 320, arcGap: 45, arcSegments: 12, lineCap: 'butt', rotationSpeed: 0.02, 
+  arcRotationEnabled: true,
   trailLength: 30, trailWidth: 1.0, trailOpacity: 0.5, showTrail: true, 
-  glowEffect: true, glowBlur: 30, glowIntensity: 1.5, backgroundColor: '#050505', 
+  glowEffect: true, glowOnFrozen: false, glowBlur: 30, glowIntensity: 1.5, backgroundColor: '#050505', 
   hitFlash: true, particleCount: 35, dustIntensity: 1.0, overlayText: 'WAIT FOR IT...', 
   overlayTextY: -250, overlayFontWeight: '900', overlayTextColor: '#ffffff', overlayFontSize: 80,
   spikeCount: 12, spikeLength: 40, spikeWidth: 20, 
-  spikeHollow: false, spikeColor: '#ff3333',
+  spikeHollow: false, spikeColor: '#ff3333', independentSpikes: false, spikeRotationSpeed: 0.02,
   show916Frame: true, melody: 'PENTATONIC', customMelody: '440, 550, 660', motionBlur: 0.2, cameraShake: 0,
   freezeGrayscale: false,
   explosionEffect: false, explosionIntensity: 1.0,
@@ -52,7 +54,8 @@ const DEFAULT_VISUALS: VisualConfig = {
   ballImage: '',
   centerImage: '',
   showSpawnPreview: true,
-  showTrajectory: true
+  showTrajectory: true,
+  arcInitialAngle: 0
 };
 
 const DEFAULT_COUNTER: CounterConfig = {
@@ -125,6 +128,7 @@ const App: React.FC = () => {
   const particlesRef = useRef<Particle[]>([]);
   const globalNoteIndexRef = useRef<number>(0);
   const boundaryAngleRef = useRef<number>(0);
+  const spikeAngleRef = useRef<number>(0); // Independent rotation
   const flashRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(performance.now());
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -313,9 +317,6 @@ const App: React.FC = () => {
           osc.detune.value = detune;
       }
       
-      // Removed the aggressive pitch drop that was making melodies sound like lasers/drums
-      // osc.frequency.exponentialRampToValueAtTime(freq * 0.5, ctx.currentTime + attack + decay);
-      
       osc.connect(gain);
       osc.start(); 
       osc.stop(ctx.currentTime + attack + decay + 0.1);
@@ -435,7 +436,8 @@ const App: React.FC = () => {
     opacityRef.current = 1;
     cameraShakeRef.current = 0;
     simulationTimeRef.current = 0;
-    boundaryAngleRef.current = 0; 
+    boundaryAngleRef.current = (vRef.current.arcInitialAngle || 0) * (Math.PI / 180); // Reset to specific angle
+    spikeAngleRef.current = (vRef.current.arcInitialAngle || 0) * (Math.PI / 180);
     scriptExecutedRef.current.clear();
     
     spawn();
@@ -736,6 +738,44 @@ const App: React.FC = () => {
     } catch (e) {}
   };
 
+  const checkTriangleCollision = (cx: number, cy: number, r: number, p1x: number, p1y: number, p2x: number, p2y: number, p3x: number, p3y: number) => {
+      // Simple circle-triangle collision by checking distance to segments and point inclusion
+      // Optimization: First check bounding box or circumcircle
+      
+      const pointInCircle = (px: number, py: number) => (px-cx)*(px-cx) + (py-cy)*(py-cy) <= r*r;
+      if (pointInCircle(p1x, p1y) || pointInCircle(p2x, p2y) || pointInCircle(p3x, p3y)) return true;
+      
+      // Check collision with edges
+      const distToSegment = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+          const A = px - x1; const B = py - y1;
+          const C = x2 - x1; const D = y2 - y1;
+          const dot = A * C + B * D;
+          const lenSq = C * C + D * D;
+          let param = -1;
+          if (lenSq !== 0) param = dot / lenSq;
+          let xx, yy;
+          if (param < 0) { xx = x1; yy = y1; }
+          else if (param > 1) { xx = x2; yy = y2; }
+          else { xx = x1 + param * C; yy = y1 + param * D; }
+          const dx = px - xx; const dy = py - yy;
+          return Math.sqrt(dx * dx + dy * dy);
+      };
+      
+      if (distToSegment(cx, cy, p1x, p1y, p2x, p2y) <= r) return true;
+      if (distToSegment(cx, cy, p2x, p2y, p3x, p3y) <= r) return true;
+      if (distToSegment(cx, cy, p3x, p3y, p1x, p1y) <= r) return true;
+
+      // Check if circle center is inside triangle (barycentric technique)
+      // Standard algorithm omitted for brevity, assuming edges usually catch it in this context
+      // But for completeness:
+      const area = 0.5 * (-p2y * p3x + p1y * (-p2x + p3x) + p1x * (p2y - p3y) + p2x * p3y);
+      const s = 1 / (2 * area) * (p1y * p3x - p1x * p3y + (p3y - p1y) * cx + (p1x - p3x) * cy);
+      const t = 1 / (2 * area) * (p1x * p2y - p1y * p2x + (p1y - p2y) * cx + (p2x - p1x) * cy);
+      if (s > 0 && t > 0 && 1 - s - t > 0) return true;
+
+      return false;
+  };
+
   const update = () => {
     const now = performance.now();
     
@@ -803,7 +843,15 @@ const App: React.FC = () => {
     }
     
     if (!isDraggingRef.current) {
-        boundaryAngleRef.current += v.rotationSpeed * dt * 60;
+        if (v.arcRotationEnabled) {
+            boundaryAngleRef.current += v.rotationSpeed * dt * 60;
+        }
+        
+        if (v.independentSpikes) {
+            spikeAngleRef.current += v.spikeRotationSpeed * dt * 60;
+        } else {
+            spikeAngleRef.current = boundaryAngleRef.current;
+        }
     }
 
     const SUB_STEPS = p.physicsSubSteps || 8;
@@ -823,6 +871,7 @@ const App: React.FC = () => {
 
           if (!b.isFrozen) {
             b.vx += p.gravityX * subDt * 60; b.vy += p.gravityY * subDt * 60;
+            // Apply drag but respect "realistic" frictionless toggle if desired
             b.vx *= Math.pow(p.drag, subDt * 60); b.vy *= Math.pow(p.drag, subDt * 60);
             
             const spd = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
@@ -839,44 +888,88 @@ const App: React.FC = () => {
           const shapeExtent = getShapeExtent(b.shape, b.radius * b.sizeMultiplier, nx, ny);
           const wallDist = currentRadius - shapeExtent;
           
-          if (p.spikesActive && !b.isFrozen && !b.isEscaping && d > currentRadius - v.spikeLength - b.radius) {
-            // Existing spike logic remains, it is basically angular check on spikes.
-            const angle = Math.atan2(dy, dx);
-            let relAngle = angle - boundaryAngleRef.current;
-            relAngle = relAngle % (2 * Math.PI);
-            if (relAngle < 0) relAngle += 2 * Math.PI;
-            
-            // Spike collision logic... (kept same as before, simplified for brevity in thought process but kept in code)
-            const spikeCount = v.spikeCount;
-            const spikeInterval = (2 * Math.PI) / spikeCount;
-            const spikeIndex = Math.round(relAngle / spikeInterval);
-            const nearestSpikeAngle = spikeIndex * spikeInterval;
-            let normalizedSpikeAngle = nearestSpikeAngle % (2 * Math.PI);
-            if (normalizedSpikeAngle < 0) normalizedSpikeAngle += 2 * Math.PI;
-            
-            // Check if spike is in the solid part (not in gap)
-            const isLocked = p.lockGap && b.timerFrames > 0;
-            const currentGap = isLocked ? 0 : v.arcGap;
-            const gapRad = currentGap * (Math.PI / 180);
-            
-            // NOTE: Visual gap is centered at 0 relative angle. 
-            // So Solid is outside [-gap/2, gap/2].
-            // Spike check:
-            let spikeRel = normalizedSpikeAngle; 
-            if (spikeRel > Math.PI) spikeRel -= 2 * Math.PI; // -PI to PI
-            
-            if (Math.abs(spikeRel) > gapRad / 2) { 
-                const diff = Math.abs(relAngle - nearestSpikeAngle);
-                const angularHalfWidth = (v.spikeWidth / 2) / d;
-                if (diff < angularHalfWidth + 0.05) {
-                    b.isFrozen = true; b.vx = 0; b.vy = 0;
-                    b.color = v.spikeColor; 
-                    if (v.explosionEffect) handleExplosion(b, v.spikeColor);
-                    else {
-                      for(let i=0; i<10; i++) particlesRef.current.push({ x: b.x, y: b.y, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1, color: v.spikeColor, size: Math.random()*5 + 2 });
+          if (p.spikesActive && !b.isFrozen && !b.isEscaping) {
+            const spikeBaseAngle = spikeAngleRef.current;
+            // 1. Precise Check (Triangle Physics)
+            if (p.preciseSpikeCollision) {
+                const spikeCount = v.spikeCount;
+                const spikeInterval = (2 * Math.PI) / spikeCount;
+                // Only check spikes that are reasonably close to the ball's angle to save perf
+                const ballAngle = Math.atan2(dy, dx);
+                let relAngle = ballAngle - spikeBaseAngle;
+                relAngle = relAngle % (2 * Math.PI);
+                if (relAngle < 0) relAngle += 2 * Math.PI;
+                const approxIndex = Math.round(relAngle / spikeInterval);
+                
+                // Check neighbor spikes too just in case
+                for(let i = approxIndex - 1; i <= approxIndex + 1; i++) {
+                    const ang = spikeBaseAngle + i * spikeInterval;
+                    // Check if this spike is in a GAP (if spikes are synced with arc)
+                    let inGap = false;
+                    if (!v.independentSpikes) {
+                        let checkRel = (ang - boundaryAngleRef.current) % (2*Math.PI);
+                        if(checkRel < 0) checkRel += 2*Math.PI;
+                        if(checkRel > Math.PI) checkRel -= 2*Math.PI;
+                        const gapRad = (p.lockGap && b.timerFrames > 0 ? 0 : v.arcGap) * Math.PI/180;
+                        if(Math.abs(checkRel) <= gapRad/2) inGap = true;
                     }
-                    shouldSpawn = true;
-                    playSfx(b, 100); 
+                    
+                    if (!inGap) {
+                         const sx = center.x + Math.cos(ang) * (currentRadius - v.arcThickness/2);
+                         const sy = center.y + Math.sin(ang) * (currentRadius - v.arcThickness/2);
+                         // Tip
+                         const tx = center.x + Math.cos(ang) * (currentRadius - v.arcThickness/2 - v.spikeLength);
+                         const ty = center.y + Math.sin(ang) * (currentRadius - v.arcThickness/2 - v.spikeLength);
+                         // Base width approximation
+                         const baseHalfWidth = v.spikeWidth / 2;
+                         const perpX = -Math.sin(ang) * baseHalfWidth;
+                         const perpY = Math.cos(ang) * baseHalfWidth;
+                         const bx1 = sx + perpX; const by1 = sy + perpY;
+                         const bx2 = sx - perpX; const by2 = sy - perpY;
+                         
+                         if (checkTriangleCollision(b.x, b.y, b.radius * b.sizeMultiplier * 0.8, tx, ty, bx1, by1, bx2, by2)) {
+                             b.isFrozen = true; b.vx = 0; b.vy = 0; b.color = v.spikeColor;
+                             if(v.explosionEffect) handleExplosion(b, v.spikeColor);
+                             shouldSpawn = true; playSfx(b, 100);
+                         }
+                    }
+                }
+            } 
+            // 2. Legacy Sector Check (Fallback)
+            else if (d > currentRadius - v.spikeLength - b.radius) {
+                const angle = Math.atan2(dy, dx);
+                let relAngle = angle - spikeBaseAngle;
+                relAngle = relAngle % (2 * Math.PI);
+                if (relAngle < 0) relAngle += 2 * Math.PI;
+                
+                const spikeCount = v.spikeCount;
+                const spikeInterval = (2 * Math.PI) / spikeCount;
+                const spikeIndex = Math.round(relAngle / spikeInterval);
+                const nearestSpikeAngle = spikeIndex * spikeInterval;
+                
+                let normalizedSpikeAngle = nearestSpikeAngle % (2 * Math.PI);
+                
+                // If synced, check gaps
+                let solid = true;
+                if (!v.independentSpikes) {
+                    let arcRel = nearestSpikeAngle; 
+                    if (arcRel > Math.PI) arcRel -= 2 * Math.PI;
+                    // Note: This logic assumes spikes align with 0 at start. 
+                    // To be precise with the visual gap:
+                    const gapRad = (p.lockGap && b.timerFrames > 0 ? 0 : v.arcGap) * Math.PI / 180;
+                    if(Math.abs(arcRel) <= gapRad/2) solid = false;
+                }
+
+                if (solid) { 
+                    const diff = Math.abs(relAngle - nearestSpikeAngle);
+                    const angularHalfWidth = (v.spikeWidth / 2) / d;
+                    if (diff < angularHalfWidth + 0.05) {
+                        b.isFrozen = true; b.vx = 0; b.vy = 0;
+                        b.color = v.spikeColor; 
+                        if (v.explosionEffect) handleExplosion(b, v.spikeColor);
+                        shouldSpawn = true;
+                        playSfx(b, 100); 
+                    }
                 }
             }
           }
@@ -994,16 +1087,28 @@ const App: React.FC = () => {
                 const movePer = overlap / totalInvMass;
                 b1.x -= nx * movePer * invM1; b1.y -= ny * movePer * invM1;
                 b2.x += nx * movePer * invM2; b2.y += ny * movePer * invM2;
+                
+                // Relative velocity
                 const v1n = b1.vx * nx + b1.vy * ny; 
                 const v2n = b2.vx * nx + b2.vy * ny;
                 const vRel = v1n - v2n;
+                
                 if (vRel > 0) {
                    const e = p.restitution;
                    const impulseScalar = -(1 + e) * vRel / totalInvMass;
-                   const ix = impulseScalar * nx;
-                   const iy = impulseScalar * ny;
+                   
+                   // Scatter Logic: Rotate the normal vector slightly
+                   // This prevents "straight line" bouncing
+                   const scatter = (Math.random() - 0.5) * (p.collisionScatter || 0); 
+                   const snx = nx * Math.cos(scatter) - ny * Math.sin(scatter);
+                   const sny = nx * Math.sin(scatter) + ny * Math.cos(scatter);
+                   
+                   const ix = impulseScalar * snx;
+                   const iy = impulseScalar * sny;
+                   
                    b1.vx += ix * invM1; b1.vy += iy * invM1;
                    b2.vx -= ix * invM2; b2.vy -= iy * invM2;
+                   
                    if (p.colorChangeOnBounce && !p.deterministic) { b1.color = getRandomColor(); b2.color = getRandomColor(); }
                    
                    if (p.soundOnCollision) {
@@ -1165,21 +1270,28 @@ const App: React.FC = () => {
         const interval = (Math.PI * 2) / spikeCount;
         
         // Spike visual check needs to align with gap center logic
-        // Gap is at boundaryAngleRef.current.
-        // Solid is outside [-gap/2, gap/2] relative to that.
+        // Gap is at boundaryAngleRef.current OR spikeAngleRef if independent
+        
         const isLocked = p.lockGap && c.mode === 'TIMER' && ballsRef.current.some(b => b.timerFrames > 0 && !b.isFrozen);
         const currentGap = isLocked ? 0 : v.arcGap;
         const gapRad = currentGap * (Math.PI / 180);
+        const currentSpikeBase = spikeAngleRef.current;
 
         for (let i = 0; i < spikeCount; i++) {
-            const ang = boundaryAngleRef.current + i * interval;
+            const ang = currentSpikeBase + i * interval;
             
-            // Check if spike is in solid region
-            let rel = (ang - boundaryAngleRef.current) % (Math.PI * 2);
-            if (rel < 0) rel += Math.PI * 2;
-            if (rel > Math.PI) rel -= 2 * Math.PI; // -PI to PI
+            // Check if spike is in solid region of ARC (if not independent)
+            // If independent, spikes draw regardless of gap (unless you want complex logic, but standard is they float)
+            let shouldDraw = true;
             
-            if (Math.abs(rel) > gapRad / 2) {
+            if (!v.independentSpikes) {
+                let rel = (ang - boundaryAngleRef.current) % (Math.PI * 2);
+                if (rel < 0) rel += Math.PI * 2;
+                if (rel > Math.PI) rel -= 2 * Math.PI; // -PI to PI
+                if (Math.abs(rel) <= gapRad / 2) shouldDraw = false;
+            }
+
+            if (shouldDraw) {
                 const sx = center.x + Math.cos(ang) * (currentRadius - v.arcThickness/2);
                 const sy = center.y + Math.sin(ang) * (currentRadius - v.arcThickness/2);
                 
@@ -1238,9 +1350,12 @@ const App: React.FC = () => {
         ctx.save();
         ctx.translate(b.x, b.y);
         
-        if (v.glowEffect) {
+        // Glow Effect Toggle Logic
+        if (v.glowEffect && (!b.isFrozen || v.glowOnFrozen)) {
             ctx.shadowBlur = v.glowBlur;
             ctx.shadowColor = b.color;
+        } else {
+            ctx.shadowBlur = 0;
         }
         
         if (b.shape === 'image' && ballImgRef.current) {
